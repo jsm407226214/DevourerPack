@@ -504,7 +504,7 @@ local function GetLuckFn(inst, owner)
     if not devourer then return 0 end
     local stats = devourer.stats or {}
     local event_mult = devourer.event.YOTH and TUNING.HORSESHOE_EVENT_LUCK_MULTIPLIER or 1 -- 活动期间幸运值翻3倍
-    local base_luck = (stats.luck or 0) * TUNING.HORSESHOE_LUCK
+    local base_luck = (stats.luck or 0) -- * TUNING.HORSESHOE_LUCK -- 基础幸运值，直接取自属性，不再乘以官方系数
     local suit_mult = EntityHasSetBonus(owner, EQUIPMENTSETNAMES.YOTH_KNIGHT) and 2 or 1 -- 骑士套装幸运值翻倍
     add_utils.debug_print("Luck calculation:", "base_luck=", base_luck, "event_mult=", event_mult, "suit_mult=", suit_mult)
     return base_luck * event_mult * suit_mult
@@ -1008,7 +1008,8 @@ function Devourer:OnInit()
     -- 猪人状态（统一管理）
     self.pig_state = {
         pig = nil,                  -- 猪人实体引用
-        kill_count = 0,             -- 击杀计数（经验）
+        total_exp = 0,              -- 累计经验值
+        level_exp = 0,              -- 当前等级段经验值
         health = nil,               -- 召回时保存的血量
         max_health = 300,           -- 与 pig_config.growth.base_health 保持一致
         health_regen_task = nil,    -- 血量恢复定时器
@@ -1017,10 +1018,33 @@ function Devourer:OnInit()
         variation = nil,            -- 猪人变体/颜色（持久化，首次召唤后不变）
         alive = nil,                -- nil=未召唤过, true=活着, false=已死亡（需消耗猪鼻铸币复活）
         spawn_task = nil,           -- 生成定时器
+        survival_task = nil,        -- 生存计时器
         level_up_monsters = {},     -- Boss击杀追踪
+        -- 宠物统计数据（突破条件用）
+        total_kills = 0,
+        kill_elite = 0,
+        kill_large = 0,
+        boss_assist = 0,
+        boss_kill = 0,
+        boss_kill_list = {},
+        planar_boss = 0,
+        eat_count = 0,
+        eat_favorite_count = 0,
+        eat_favorite_types = {},   -- 最爱料理种类（去重）
+        work_count = 0,
+        survival_days = 0,
     }
     self._onpigdeath = function(pig, data) self:PigDeath() end
     self._onpigkilled = function(pig, data) self:PigKilled(pig, data) end
+    self._onpighit = function(pig, data)
+        if data and data.target and data.target:HasTag("epic") then
+            if not self.pig_state._boss_hit_set then self.pig_state._boss_hit_set = {} end
+            if not self.pig_state._boss_hit_set[data.target.GUID] then
+                self.pig_state._boss_hit_set[data.target.GUID] = true
+                self.pig_state.boss_assist = (self.pig_state.boss_assist or 0) + 1
+            end
+        end
+    end
     
     -- 初始化配置数据（写死，无需外部传入）
     local config_control_data = STRINGS.DEVOURER_CONTROLS or {}
@@ -2877,7 +2901,7 @@ function Devourer:Upgrade()
         treadwater = 0,         -- 水面行走
         voidwalk = 0,           -- 虚空行走
         monkey_token = 0,       -- 诅咒解析
-        add_slot_cols = 1,       -- 背包格子行数，默认1，也就是2*2，如果0的话就是2*1
+        add_slot_cols = 0,       -- 背包格子行数，默认1，也就是2*2，如果0的话就是2*1
         basereflect = 0,        -- 物理反弹伤害
         planarreflect = 0,      -- 位面反弹伤害
         specialreflect = 0,     -- 百分比当前生命值反弹伤害（最低1）
@@ -2911,6 +2935,7 @@ function Devourer:Upgrade()
         snow_slot = false,      -- 制冷格子
         repair_slot = 0,        -- 修理格子
         luck = 0,               -- 幸运值
+        badluck = 0,            -- 霉运值
         health_absor = 0,       -- 伤害吸收（不同于背包的防御，这个是作用于玩家身上的）
         mightiness_mighty = 0,  -- 强壮（重物不减移速）
         -- vegetarian = false,        -- 素食主义者（可以吃素）
@@ -3199,13 +3224,12 @@ function Devourer:Upgrade()
         end
         inst.components.shadowlevel:SetDefaultLevel(stats.shadowlevel)
     end
-    if stats.luck and stats.luck > 0 then
-        add_utils.debug_print(string.format("[幸运] 幸运值: %d", stats.luck))
+    if (stats.luck and stats.luck > 0) or (stats.badluck and stats.badluck > 0) then
+        add_utils.debug_print(string.format("[幸运/霉运] 幸运值: %s, 霉运值: %s", tostring(stats.luck), tostring(stats.badluck)))
         if not inst.components.luckitem then
             inst:AddComponent("luckitem")
         end
-        inst.components.luckitem:SetLuck(GetLuckFn) -- 如果没被装备
-        inst.components.luckitem:SetEquippedLuck(GetLuckFn) -- 如果被装备了
+        self:ChangeLuck(stats)
     end
 
     -- 添加特殊标签
@@ -3278,7 +3302,7 @@ function Devourer:Upgrade()
         -- add_utils.debug_print("[信息] 背包未装备，跳过属性刷新")
     end
 
-    self.packlv.extra_rows = self.stats.add_slot_cols or 1
+    self.packlv.extra_rows = self.stats.add_slot_cols or 0
     self.packlv.fire = self.stats.fire_slot and 1 or 0
     self.packlv.ice = self.stats.snow_slot and 1 or 0
     self.packlv.repair = self.stats.repair_slot or 0
@@ -4077,7 +4101,7 @@ function Devourer:OnDevourer(item, owner)
     if can_level_up then
         fx = SpawnPrefab("fx_book_light_upgraded")
     else
-        if effect.add_slot_cols and effect.add_slot_cols > 1 then
+        if effect.add_slot_cols and effect.add_slot_cols > 0 then
             fx = SpawnPrefab("fx_book_research_station")
         elseif effect.stacksize then
             fx = SpawnPrefab("chestupgrade_stacksize_taller_fx")-- 弹性空间制造器特效
@@ -4220,7 +4244,8 @@ function Devourer:OnSave()
     local data = {
         packlv = self.packlv,
         upgrade_effects = {},
-        pig_kill_count = ps.kill_count,
+        pig_total_exp = ps.total_exp,
+        pig_level_exp = ps.level_exp,
         pig_health = pig and pig:IsValid() and not IsEntityDead(pig) and pig.components.health.currenthealth or ps.health,
         pig_max_health = pig and pig:IsValid() and not IsEntityDead(pig) and pig.components.health.maxhealth or ps.max_health,
         pig_data = pig and pig:IsValid() and pig:GetSaveRecord() or nil,
@@ -4229,6 +4254,20 @@ function Devourer:OnSave()
         pig_variation = ps.variation,
         pig_alive = ps.alive,
         pig_level_up_monsters = ps.level_up_monsters,
+        pig_stats = {
+            total_kills = ps.total_kills,
+            kill_elite = ps.kill_elite,
+            kill_large = ps.kill_large,
+            boss_assist = ps.boss_assist,
+            boss_kill = ps.boss_kill,
+            boss_kill_list = ps.boss_kill_list,
+            planar_boss = ps.planar_boss,
+            eat_count = ps.eat_count,
+            eat_favorite_count = ps.eat_favorite_count,
+            eat_favorite_types = ps.eat_favorite_types,
+            work_count = ps.work_count,
+            survival_days = ps.survival_days,
+        },
         control_switch = self.control_switch or {},
         max_level = self.max_level,
         current_bound_function = self.current_bound_function or "AreaAttack",
@@ -4301,17 +4340,38 @@ function Devourer:OnLoad(data)
     end
     self:SetPackState()        -- 恢复背包格子数，这里不需要传，因为前面存了，不传默认原有的
     -- 恢复猪人状态（兼容旧存档 key 名）
-    self.pig_state.kill_count = data.pig_kill_count or data.pigKillCount or self.pig_state.kill_count or 0
+    self.pig_state.total_exp = data.pig_total_exp or 0
+    if data.pig_level_exp then
+        self.pig_state.level_exp = data.pig_level_exp
+    else
+        local lv = self:GetPigLevel(self.pig_state.total_exp)
+        self.pig_state.level_exp = self.pig_state.total_exp - (pig_config._cum_exp[lv] or 0)
+    end
     self.pig_state.health = data.pig_health or self.pig_state.health
     self.pig_state.max_health = data.pig_max_health or 300
     self.pig_state.hat_data = data.pig_hat
     self.pig_state.name = data.pig_name
     self.pig_state.variation = data.pig_variation
     self.pig_state.alive = data.pig_alive
-    if data.pig_level_up_monsters or data.pig_level_up_monster then
-        self.pig_state.level_up_monsters = data.pig_level_up_monsters or data.pig_level_up_monster
+    if data.pig_stats then
+        local st = data.pig_stats
+        self.pig_state.total_kills = st.total_kills or 0
+        self.pig_state.kill_elite = st.kill_elite or 0
+        self.pig_state.kill_large = st.kill_large or 0
+        self.pig_state.boss_assist = st.boss_assist or 0
+        self.pig_state.boss_kill = st.boss_kill or 0
+        self.pig_state.boss_kill_list = st.boss_kill_list or {}
+        self.pig_state.planar_boss = st.planar_boss or 0
+        self.pig_state.eat_count = st.eat_count or 0
+        self.pig_state.eat_favorite_count = st.eat_favorite_count or 0
+        self.pig_state.eat_favorite_types = st.eat_favorite_types or {}
+        self.pig_state.work_count = st.work_count or 0
+        self.pig_state.survival_days = st.survival_days or 0
     end
-    local saved_pig_data = data.pig_data or data.pigdata
+    if data.pig_level_up_monsters then
+        self.pig_state.level_up_monsters = data.pig_level_up_monsters
+    end
+    local saved_pig_data = data.pig_data
     if saved_pig_data then
         if self.control_switch and self.control_switch.PigSummon == 2 then
             self.inst:DoTaskInTime(0, function() self:ChangePigSummon(2) end)
@@ -4338,16 +4398,25 @@ function Devourer:ChangeLuck(stats)
     if not stats then
         stats = self.stats
     end
-    if stats.luck and stats.luck > 0 and self:CheckControlSwitch("Luck", 2) then
-        -- add_utils.debug_print(string.format("[幸运] 幸运值: %d", stats.luck))
+    local luck_mode = self.control_switch.Luck
+    if luck_mode == 2 and stats.luck and stats.luck > 0 then
+        -- 幸运模式：沿用原马蹄铁计算逻辑
         if not self.inst.components.luckitem then
             self.inst:AddComponent("luckitem")
         end
-        self.inst.components.luckitem:SetLuck(GetLuckFn) -- 如果没被装备
-        self.inst.components.luckitem:SetEquippedLuck(GetLuckFn) -- 如果被装备了
+        self.inst.components.luckitem:SetLuck(GetLuckFn)
+        self.inst.components.luckitem:SetEquippedLuck(GetLuckFn)
+    elseif luck_mode == 3 and stats.badluck and stats.badluck > 0 then
+        -- 霉运模式：直接用 badluck*累计值
+        if not self.inst.components.luckitem then
+            self.inst:AddComponent("luckitem")
+        end
+        self.inst.components.luckitem:SetLuck(stats.badluck)
+        self.inst.components.luckitem:SetEquippedLuck(stats.badluck)
     elseif self.inst.components.luckitem then
-        self.inst.components.luckitem:SetLuck(0) -- 如果没被装备
-        self.inst.components.luckitem:SetEquippedLuck(0) -- 如果被装备了
+        -- 关闭或无效值
+        self.inst.components.luckitem:SetLuck(0)
+        self.inst.components.luckitem:SetEquippedLuck(0)
     end
 end
 

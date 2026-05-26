@@ -3,11 +3,6 @@ STRINGS = GLOBAL.STRINGS
 STRINGS.NAMES.DEVOURER_PACK = "DevourerPack" -- 物体在游戏中显示的名字
 -- 皮肤名称
 STRINGS.SKIN_NAMES.devourer_cats = "DevourerCats"
--- Pig names now random from pig_config.lua pool, below as fallback
-STRINGS.NAMES.DEVOURER_PIG1 = "Piggy Smalls"
-STRINGS.NAMES.DEVOURER_PIG2 = "Sir Oinksalot"
-STRINGS.NAMES.DEVOURER_PIG3 = "Hammibal Lecter"
-STRINGS.NAMES.DEVOURER_PIG4 = "Kevin Bacon"
 STRINGS.NAMES.DEVOURER_PACK_NAMES = {
     [1] = "Jörmungandr Devourer",
     [2] = "Typhon's Maw Devourer",
@@ -165,10 +160,11 @@ STRINGS.DEVOURER_CONTROLS = {
         name = "Luck",
         options = {
             { text = "Off", value = 1 },
-            { text = "On", value = 2 }
+            { text = "Lucky", value = 2 },
+            { text = "Bad Luck", value = 3 }
         },
         order = 13,
-        default = 2  -- 默认开启
+        default = 2  -- Default: Lucky
     },
 
     RainProtect = {
@@ -203,6 +199,17 @@ STRINGS.DEVOURER_PIG_MESSAGES = {
     COMBO = "Combo x%d",
     ATK_SPD = "Int %df",
     DEATH = "Pig Guardian Killed! EXP reduced by 20%",
+    WORK_EXP = "Work+%d EXP",
+    SURVIVAL_EXP = "Survival+%d EXP",
+    BREAKTHROUGH_TOTAL_KILLS = "Kill %s creatures",
+    BREAKTHROUGH_EAT_COUNT = "Eat %s times",
+    BREAKTHROUGH_SURVIVAL_DAYS = "Survive %s days",
+    BREAKTHROUGH_KILL_ELITE = "Kill %s elite creatures",
+    BREAKTHROUGH_WORK_COUNT = "Complete %s works",
+    BREAKTHROUGH_EAT_FAVORITE = "Eat %s favorite dishes",
+    BREAKTHROUGH_BOSS_KILL = "Kill %s boss types",
+    BREAKTHROUGH_KILL_LARGE = "Kill %s large creatures",
+    BREAKTHROUGH_PLANAR_BOSS = "Kill mutated boss %s",
 }
 STRINGS.DEVOURER_PIG_TALK_HELP_CHOP_WOOD = {
     "Die, you stupid tree!",
@@ -399,7 +406,8 @@ STRINGS.DP_DevourerPack = {
         fire_slot = "Fire Slot",
         snow_slot = "Snow Slot",
         repair_slot = "Repair Slot+%d%%(60s)",
-        luck = "Luck+%d",
+        luck = "Luck+%s",
+        badluck = "Bad Luck+%s",
         
         hp = "maximum Health+%g",
         sanity = "maximum Sanity+%g",

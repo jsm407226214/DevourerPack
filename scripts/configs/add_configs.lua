@@ -74,6 +74,7 @@ config.excluded_extra_defense =  {
     recipe2_moon = true,
     repair_slot = true,
     luck = true,
+    badluck = true,
 }
 
 config.level_up = {
@@ -143,6 +144,7 @@ config.level_up = {
             vegetarian = true,                  -- 素食者（女武神可以吃素食）
             carnivore = true,                   -- 肉食者（小鱼妹可以吃肉食）
             appetizer = true,                   -- 开胃菜（不挑食）
+            badluck = true,                     -- 霉运
         }
     },
     lv2 = {
@@ -366,6 +368,7 @@ config.upgrade_effects = {
     oceanfish_small_8_inv = { kw = 30, season_fish = 1 },               -- 炽热太阳鱼/Scorching Sunfish
     oceanfish_small_6_inv = { hunger_rate = 0.1, season_fish = 1 },       -- 落叶比目鱼/Fallounder
     oceanfish_medium_8_inv = { kc = 30, season_fish = 1 },              -- 冰鲷鱼/Ice Bream
+    oceanfish_medium_4_inv = { badluck = 0.1, max = 30 },             -- 黑鲶鱼/Black Catfish
     bootleg = { walkice = true },                                       -- 出逃腿靴/Bootleg Getaway
 
 
@@ -544,7 +547,7 @@ config.upgrade_effects = {
     yoth_knighthat = { knight_suit = 1, defense = 0.05,princessandknight = 1, event = "YOTH" },      -- 镀金骑士头盔/Golden Knight Helm
     armor_yoth_knight = { knight_suit = 1, defense = 0.05, princessandknight = 1, event = "YOTH" },      -- 镀金骑士胸甲/Golden Knight Armor
     yoth_lance = { speed = 0.05, damage = 1,event = "YOTH" }, -- 冲锋骑枪/
-    horseshoe = { luck = 1, max = 15, event = "YOTH" },  -- 幸运马蹄铁/Horseshoe
+    horseshoe = { luck = 0.05, max = 15, event = "YOTH" },  -- 幸运马蹄铁/Horseshoe
 
 
     -- 不可移动的物品

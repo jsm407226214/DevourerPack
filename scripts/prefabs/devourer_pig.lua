@@ -22,9 +22,18 @@ local brain = require("brains/devourer_pigbrain")
 -- 工具函数
 -- ============================================
 
-local function GetPigLevel(killCount)
-    if not killCount or killCount <= 0 then return 1 end
-    return math.floor((killCount - 1) / pig_config.growth.exp_per_level) + 1
+local function GetPigLevel(totalExp)
+    if not totalExp or totalExp <= 0 then return 1 end
+    local cum = pig_config._cum_exp
+    for lv = pig_config.growth.max_level, 2, -1 do
+        if totalExp > cum[lv] then return lv end
+    end
+    return 1
+end
+
+local function SyncPigLevelExp(dev)
+    local lv = dev:GetPigLevel(dev.pig_state.total_exp)
+    dev.pig_state.level_exp = dev.pig_state.total_exp - (pig_config._cum_exp[lv] or 0)
 end
 
 local function ShouldSleep() return false end
@@ -51,32 +60,44 @@ local function ApplyLevelStats(inst, level)
     local cfg = pig_config.growth
     local sz = pig_config.size
 
-    -- 存储等级供 SG 等模块读取
     inst._pig_level = level
 
-    -- 攻击力（无限成长）
+    -- 攻击力
     inst.components.combat:SetDefaultDamage(cfg.base_attack + (level - 1) * cfg.attack_per_level)
 
-    -- 位面攻击（达到解锁等级后生效）
+    -- 位面攻击（8级解锁，有上限）
     if level >= cfg.unlock_planar then
         inst.components.planardamage:SetBaseDamage(
-            cfg.base_planar_attack + (level - cfg.unlock_planar + 1) * cfg.planar_attack_per_level
+            math.min((level - cfg.unlock_planar + 1) * cfg.planar_attack_per_level, cfg.max_planar_attack)
         )
     end
 
-    -- 位面防御（达到解锁等级后生效）
+    -- 位面防御（8级解锁，有上限）
     if level >= cfg.unlock_planar then
         inst.components.planardefense:SetBaseDefense(
-            cfg.base_planar_defense + (level - cfg.unlock_planar + 1) * cfg.planar_defense_per_level
+            math.min((level - cfg.unlock_planar + 1) * cfg.planar_defense_per_level, cfg.max_planar_defense)
         )
     end
 
-    -- 伤害吸收（有上限）
-    inst.components.health:SetAbsorptionAmount(
-        math.min(cfg.base_defense + (level - 1) * cfg.defense_per_level, cfg.max_defense)
-    )
+    -- 伤害吸收（曲线：10级前线性+4%，之后每级减半，上限90%）
+    local dg = cfg.defense_growth
+    local defense
+    if level <= dg.diminish_start then
+        defense = (level - 1) * dg.per_level
+    else
+        defense = dg.diminish_start * dg.per_level
+        local remaining = level - dg.diminish_start
+        local growth = dg.per_level
+        for _ = 1, remaining do
+            growth = growth * dg.diminish_rate
+            defense = defense + growth
+            if defense >= dg.max_defense then break end
+        end
+    end
+    defense = math.min(defense, dg.max_defense)
+    inst.components.health:SetAbsorptionAmount(defense)
 
-    -- 移动速度（有上限）
+    -- 移动速度
     inst.components.locomotor.runspeed = math.min(
         cfg.base_run_speed + (level - 1) * cfg.run_speed_per_level, cfg.max_run_speed
     )
@@ -89,34 +110,41 @@ local function ApplyLevelStats(inst, level)
         math.min(cfg.base_range + (level - 1) * cfg.range_per_level, cfg.max_attack_range)
     )
 
-    -- 冰冻抗性（无限成长）
+    -- 冰冻抗性
     if inst.components.freezable then
         inst.components.freezable:SetResistance(
             cfg.base_freeze_resist + (level - 1) * cfg.freeze_resist_per_level
         )
     end
 
-    -- 吸血（达到解锁等级后生效，无限成长）
+    -- 吸血（3级解锁，每级+0.5%，上限15%）
     inst.bloodsucking = level >= cfg.unlock_blood_sucking
-        and (cfg.base_blood_sucking + (level - cfg.unlock_blood_sucking + 1) * cfg.blood_sucking_per_level)
+        and math.min((level - cfg.unlock_blood_sucking + 1) * cfg.blood_sucking_per_level, cfg.max_blood_sucking)
         or 0
 
-    -- 范围伤害（达到解锁等级后生效，无限成长）
+    -- 范围伤害（5级解锁，每级+3%，上限60%）
     inst.areaattack = level >= cfg.unlock_area_attack
-        and (cfg.base_area_attack + (level - cfg.unlock_area_attack + 1) * cfg.area_attack_per_level)
+        and math.min((level - cfg.unlock_area_attack + 1) * cfg.area_attack_per_level, cfg.max_area_attack)
         or 0
 
-    -- 生命值
+    -- 生命值（含30级后无限成长）
     local pct = inst.components.health:GetPercent()
-    inst.components.health:SetMaxHealth(cfg.base_health + (level - 1) * cfg.health_per_level)
+    local base_max = cfg.base_health + (level - 1) * cfg.health_per_level
+    if level >= cfg.max_level and pig_config.infinite_growth.enabled then
+        local max_exp = pig_config._cum_exp[cfg.max_level]
+        local extra = (inst.totalExp or 0) - max_exp
+        if extra > 0 then
+            local bonus = math.floor(extra / pig_config.infinite_growth.exp_per_hp)
+            base_max = math.min(base_max + bonus, pig_config.infinite_growth.max_hp_cap)
+        end
+    end
+    inst.components.health:SetMaxHealth(base_max)
     inst.components.health:SetPercent(pct, false)
 
-    -- 连击数（仅普攻，不含终结击）
-    inst._combo_count = math.min(cfg.combo_base + math.floor((level - 1) / cfg.combo_per_levels), cfg.combo_max)
-    print(string.format("[PigStats] LV%d _combo_count=%d _attack_interval=%d",
-        level, inst._combo_count, inst._attack_interval or 8))
+    -- 连击数（固定三连击）,这里2+最终一击=3
+    inst._combo_count = 2
 
-    -- 攻击速度（连击间隔递减）
+    -- 攻击速度
     inst._attack_interval = math.max(
         cfg.attack_interval_base - math.floor((level - 1) / cfg.attack_interval_per_levels),
         cfg.attack_interval_min
@@ -129,24 +157,22 @@ local function ApplyLevelStats(inst, level)
     inst.DynamicShadow:SetSize(1.5 * scale, 0.75 * scale)
     inst:SetPhysicsRadiusOverride(0.5 * scale)
 
-    -- 更新额外属性表（用于显示，key 需与 STRINGS.DEVOURER_PIG_MESSAGES 对齐）
+    -- 额外属性表（用于显示）
     local run_spd = math.min(cfg.base_run_speed + (level - 1) * cfg.run_speed_per_level, cfg.max_run_speed)
     local walk_spd = math.min(cfg.base_walk_speed + (level - 1) * cfg.walk_speed_per_level, cfg.max_walk_speed)
     inst.extra_stats = {
-        ATTACK = cfg.base_attack + (level - 1) * cfg.attack_per_level - cfg.base_attack,
+        ATTACK = (level - 1) * cfg.attack_per_level,
         PLANAR_ATK = level >= cfg.unlock_planar
-            and (cfg.base_planar_attack + (level - cfg.unlock_planar + 1) * cfg.planar_attack_per_level) or 0,
+            and math.min((level - cfg.unlock_planar + 1) * cfg.planar_attack_per_level, cfg.max_planar_attack) or 0,
         PLANAR_DEF = level >= cfg.unlock_planar
-            and (cfg.base_planar_defense + (level - cfg.unlock_planar + 1) * cfg.planar_defense_per_level) or 0,
-        DEFENSE = math.floor(math.min(cfg.base_defense + (level - 1) * cfg.defense_per_level, cfg.max_defense) * 100),
+            and math.min((level - cfg.unlock_planar + 1) * cfg.planar_defense_per_level, cfg.max_planar_defense) or 0,
+        DEFENSE = math.floor(defense * 100),
         RANGE = math.min(cfg.base_range + (level - 1) * cfg.range_per_level, cfg.max_attack_range) - cfg.base_range,
         FREEZE_RESIST = cfg.base_freeze_resist + (level - 1) * cfg.freeze_resist_per_level,
         BLOOD_SUCKING = inst.bloodsucking > 0 and math.floor(inst.bloodsucking * 100) or 0,
         AREA_ATTACK = inst.areaattack > 0 and math.floor(inst.areaattack * 100) or 0,
         RUN_SPEED = run_spd,
         WALK_SPEED = walk_spd,
-        COMBO = inst._combo_count or 1,
-        ATK_SPD = inst._attack_interval or 8,
     }
 end
 
@@ -156,14 +182,61 @@ end
 
 local function BuildPigLevelMsg(inst)
     local msgs = {}
-    local exp = inst.killCount or 0
-    local level = GetPigLevel(exp)
-    local exp_per = pig_config.growth.exp_per_level
-    local current_exp = math.min(exp - (level - 1) * exp_per, exp_per)
+    local level = GetPigLevel(inst.totalExp or 0)
+    local needed = pig_config.growth.getExpPerLevel(level + 1)
+        or pig_config.growth.getExpPerLevel(pig_config.growth.max_level)
+
+    -- 获取当前等级段经验（优先从 pig_state.level_exp 读）
+    local current_exp = 0
+    local ps = nil
+    local leader = inst.components.follower and inst.components.follower.leader
+    if leader and leader:HasTag("player") then
+        local pack = add_utils.GetDevourerPack(leader)
+        if pack and pack.components.devourer then
+            ps = pack.components.devourer.pig_state
+            current_exp = ps.level_exp or 0
+        end
+    end
+    if not ps then
+        local cum_before = pig_config._cum_exp[level] or 0
+        current_exp = (inst.totalExp or 0) - cum_before
+    end
 
     table.insert(msgs, STRINGS.DEVOURER_PIG_MESSAGES.PREFIX)
-    table.insert(msgs, string.format("LV%d %d/%d", level, current_exp, exp_per))
-    return table.concat(msgs, " ")
+    table.insert(msgs, string.format("LV%d %d/%d", level, current_exp, needed))
+
+    local is_capped = false
+    -- 经验封顶 + 下一级有突破门 → 追加升级条件
+    if current_exp >= needed then
+        local next_level = level + 1
+        local bt = pig_config.level_breakthrough[next_level]
+        if bt then
+            is_capped = true
+            if ps then
+                local parts = {}
+                for _, cond in ipairs(bt.conditions) do
+                    local current
+                    if cond.type == "boss_kill" then
+                        current = 0
+                        for _ in pairs(ps.boss_kill_list or {}) do current = current + 1 end
+                    elseif cond.type == "eat_favorite_count" then
+                        current = 0
+                        for _ in pairs(ps.eat_favorite_types or {}) do current = current + 1 end
+                    else
+                        current = ps[cond.type] or 0
+                    end
+                    current = math.min(current, cond.count)
+                    local desc_key = cond.desc or ""
+                    local desc = STRINGS.DEVOURER_PIG_MESSAGES[desc_key] or desc_key
+                    local result = string.format(desc, current .. "/" .. cond.count)
+                    table.insert(parts, result)
+                end
+                table.insert(msgs, table.concat(parts, "\n"))
+            end
+        end
+    end
+
+    return table.concat(msgs, "\n"), is_capped
 end
 
 local function BuildExtraStatsMsg(inst)
@@ -193,14 +266,16 @@ end
 -- ============================================
 
 local function ProcessKill(inst, isshow, newKill)
-    inst.killCount = newKill or 0
-    local level = GetPigLevel(inst.killCount)
+    inst.totalExp = newKill or 0
+    local level = GetPigLevel(inst.totalExp)
     ApplyLevelStats(inst, level)
 
     if not isshow and inst.components.talker then
-        local msg = BuildPigLevelMsg(inst)
-        local stats_msg = BuildExtraStatsMsg(inst)
-        if stats_msg ~= "" then msg = msg .. "\n" .. stats_msg end
+        local msg, is_capped = BuildPigLevelMsg(inst)
+        if not is_capped then
+            local stats_msg = BuildExtraStatsMsg(inst)
+            if stats_msg ~= "" then msg = msg .. "\n" .. stats_msg end
+        end
         inst.components.talker:Say(msg)
     end
 end
@@ -306,24 +381,36 @@ local function OnDevourerEatItem(inst, item)
             local pack = add_utils.GetDevourerPack(leader)
             if pack and pack.components.devourer then
                 local dev = pack.components.devourer
-                local oldCount = dev.pig_state.kill_count
-                dev.pig_state.kill_count = dev.pig_state.kill_count + addExp
-                -- 吃食物不能触发升级（只有击杀Boss才能突破等级）
-                if dev:IsPigLevelUp(oldCount, dev.pig_state.kill_count) then
-                    dev.pig_state.kill_count = oldCount
+                local oldCount = dev.pig_state.total_exp
+                dev.pig_state.total_exp = dev.pig_state.total_exp + addExp
+                -- 等级突破条件检查：不满足突破条件的等级不能跨越
+                if dev:IsPigLevelUp(oldCount, dev.pig_state.total_exp) then
+                    local newLevel = dev:GetPigLevel(dev.pig_state.total_exp)
+                    if not dev:CheckBreakthrough(newLevel) then
+                        local oldLevel = dev:GetPigLevel(oldCount)
+                        dev.pig_state.total_exp = pig_config._cum_exp[oldLevel + 1] or pig_config._cum_exp[pig_config.growth.max_level]
+                    end
                 end
-                inst:ProcessKill(true, dev.pig_state.kill_count)
+                SyncPigLevelExp(dev)
+                -- 进食统计
+                dev.pig_state.eat_count = (dev.pig_state.eat_count or 0) + 1
+                if is_favorite then
+                    dev.pig_state.eat_favorite_count = (dev.pig_state.eat_favorite_count or 0) + 1
+                    dev.pig_state.eat_favorite_types = dev.pig_state.eat_favorite_types or {}
+                    dev.pig_state.eat_favorite_types[item.prefab] = true
+                end
+                inst:ProcessKill(true, dev.pig_state.total_exp)
                 addExpMsg = STRINGS.DEVOURER_PIG_MESSAGES.EAT_PREFIX
             end
         end
     end
 
-    local level_msg = BuildPigLevelMsg(inst)
+    local level_msg, is_capped = BuildPigLevelMsg(inst)
     local stats_msg = BuildExtraStatsMsg(inst)
 
     if inst.components.talker and not inst.sg:HasStateTag("busy") then
         local msg = addExpMsg .. level_msg
-        if stats_msg ~= "" then msg = msg .. "\n" .. stats_msg end
+        if not is_capped and stats_msg ~= "" then msg = msg .. "\n" .. stats_msg end
         inst.components.talker:Say(msg)
     end
 end
@@ -419,9 +506,11 @@ local function MakePigEliteFighter(variation)
 
         inst.entity:SetPristine()
         if not TheWorld.ismastersim then return inst end
+        
+        inst:AddComponent("named")
 
         -- 状态变量
-        inst.killCount = 0
+        inst.totalExp = 0
         inst.last_say_time = 0
         inst.scale = 1.0
 
@@ -531,20 +620,33 @@ local function MakePigEliteFighter(variation)
         inst:ListenForEvent("onattackother", OnAttack)
         inst:ListenForEvent("onhitother", OnHit)
 
-        -- 工作获得经验（每 work_exp_interval 次工作 +1 经验，避免砍树太多）
-        inst._work_counter = 0
-        inst:ListenForEvent("worked", function(pig, _)
-            pig._work_counter = (pig._work_counter or 0) + 1
-            local cfg = pig_config.growth
-            if pig._work_counter >= cfg.work_exp_interval then
-                pig._work_counter = 0
-                local leader = pig.components.follower and pig.components.follower.leader
-                if leader and leader:HasTag("player") then
-                    local pack = add_utils.GetDevourerPack(leader)
-                    if pack and pack.components.devourer then
-                        local dev = pack.components.devourer
-                        dev.pig_state.kill_count = dev.pig_state.kill_count + cfg.work_exp
-                        pig:ProcessKill(true, dev.pig_state.kill_count)
+        -- 工作获得经验（砍树/挖矿完成时触发）
+        inst:ListenForEvent("finishedwork", function(pig, data)
+            local action = data and data.action
+            if not action or (action.id ~= "CHOP" and action.id ~= "MINE") then
+                return
+            end
+            local leader = pig.components.follower and pig.components.follower.leader
+            if leader and leader:HasTag("player") then
+                local pack = add_utils.GetDevourerPack(leader)
+                if pack and pack.components.devourer then
+                    local dev = pack.components.devourer
+                    local cfg = pig_config.growth
+                    local oldCount = dev.pig_state.total_exp
+                    dev.pig_state.total_exp = dev.pig_state.total_exp + cfg.work_exp
+                    if dev:IsPigLevelUp(oldCount, dev.pig_state.total_exp) then
+                        local newLevel = dev:GetPigLevel(dev.pig_state.total_exp)
+                        if not dev:CheckBreakthrough(newLevel) then
+                            local oldLevel = dev:GetPigLevel(oldCount)
+                            dev.pig_state.total_exp = pig_config._cum_exp[oldLevel + 1] or pig_config._cum_exp[pig_config.growth.max_level]
+                        end
+                    end
+                    SyncPigLevelExp(dev)
+                    dev.pig_state.work_count = (dev.pig_state.work_count or 0) + 1
+                    pig:ProcessKill(true, dev.pig_state.total_exp)
+                    if pig.components.talker then
+                        pig.components.talker:Say(
+                            string.format(STRINGS.DEVOURER_PIG_MESSAGES.WORK_EXP, cfg.work_exp))
                     end
                 end
             end

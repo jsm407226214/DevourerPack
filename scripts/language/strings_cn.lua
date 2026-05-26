@@ -3,11 +3,6 @@ STRINGS = GLOBAL.STRINGS
 STRINGS.NAMES.DEVOURER_PACK = "吞噬者背包" -- 物体在游戏中显示的名字
 -- 皮肤名称
 STRINGS.SKIN_NAMES.devourer_cats = "吞噬者猫猫"
--- 猪人名字现在从 pig_config.lua 随机选取，以下作为后备
-STRINGS.NAMES.DEVOURER_PIG1 = "社会你猪哥"
-STRINGS.NAMES.DEVOURER_PIG2 = "猪突猛进"
-STRINGS.NAMES.DEVOURER_PIG3 = "天蓬元帅下凡"
-STRINGS.NAMES.DEVOURER_PIG4 = "红烧肉预备役"
 -- 中文神话版
 STRINGS.NAMES.DEVOURER_PACK_NAMES = {
     [1] = "饕餮噬渊者",
@@ -165,10 +160,11 @@ STRINGS.DEVOURER_CONTROLS = {
         name = "幸运值",
         options = {
             { text = "关闭", value = 1 },
-            { text = "开启", value = 2 }
+            { text = "幸运", value = 2 },
+            { text = "霉运", value = 3 }
         },
         order = 13,
-        default = 2  -- 默认开启
+        default = 2  -- 默认幸运
     },
 
     RainProtect = {
@@ -204,6 +200,18 @@ STRINGS.DEVOURER_PIG_MESSAGES = {
     COMBO = "连击x%d",
     ATK_SPD = "间隔%d帧",
     DEATH = "猪人守护者死亡，经验值减少20%",
+    WORK_EXP = "工作+%d经验",
+    SURVIVAL_EXP = "生存+%d经验",
+    -- 突破条件描述（%s = 进度/目标，如 "15/20"）
+    BREAKTHROUGH_TOTAL_KILLS = "累计击杀%s只生物",
+    BREAKTHROUGH_EAT_COUNT = "累计吃%s次食物",
+    BREAKTHROUGH_SURVIVAL_DAYS = "连续生存%s天",
+    BREAKTHROUGH_KILL_ELITE = "累计击杀%s只精英生物",
+    BREAKTHROUGH_WORK_COUNT = "累计完成%s次工作",
+    BREAKTHROUGH_EAT_FAVORITE = "累计吃%s种最爱料理",
+    BREAKTHROUGH_BOSS_KILL = "累计击杀%s种Boss",
+    BREAKTHROUGH_KILL_LARGE = "累计击杀%s只大型生物",
+    BREAKTHROUGH_PLANAR_BOSS = "击杀突变三王 %s",
 }
 STRINGS.DEVOURER_PIG_TALK_HELP_CHOP_WOOD = {
     "砍死这逼树！",
@@ -376,7 +384,7 @@ STRINGS.DP_DevourerPack = {
         rabbitdisguise = "兔子之友",
         treadwater = "踏水",
         voidwalk = "虚空行走",
-        add_slot_cols = "背包格子列数+%g",
+        add_slot_cols = "背包格子行数+%g",
         basereflect = "物理反射伤害+%g",
         planarreflect = "位面反射伤害+%g",
         specialreflect = "攻击者生命反射伤害+%g%%(5s)",
@@ -405,7 +413,8 @@ STRINGS.DP_DevourerPack = {
         fire_slot = "加热格",
         snow_slot = "制冷格",
         repair_slot = "修复格+%d%%(60s)",
-        luck = "幸运值+%d",
+        luck = "幸运值+%s",
+        badluck = "霉运值+%s",
 
         
         hp = "血量上限+%g",

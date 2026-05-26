@@ -5,7 +5,7 @@ name = isCh and "吞噬者背包" or "Devourer Pack"
 -- 作者名
 author = "江湖书生敏而好学" 
 -- Mod版本，可以自由设定任何值，但如果要在Steam更新自己的Mod，就必须和已经上传的Mod版本有差别。
-version = "1.9.2"
+version = "1.9.4"
 -- mod描述
 description = isCh and ([[
 [版本: %s]
@@ -203,7 +203,8 @@ local effectNames = {
     fire_slot = {zh = "加热格子", en = "Fire Slot"},
     snow_slot = {zh = "制冷格子", en = "Snow Slot"},
     repair_slot = {zh = "自动修复", en = "Auto Repair"},
-    luck = {zh = "幸运值", en = "Luck Value"},
+    luck = {zh = "幸运值", en = "Luck"},
+    badluck = {zh = "霉运", en = "Bad Luck"},
 
     -- 套装效果
     miasmaimmune = {zh = "瘴气免疫", en = "Miasma Immunity"},
@@ -500,6 +501,7 @@ configuration_options = {
     AddEffectOption("snow_slot"),
     AddEffectOption("repair_slot"),
     AddEffectOption("luck"),
+    AddEffectOption("badluck"),
 
 
     headeritem(isCh and "套装效果" or "Suit Effect",isCh and "部分装备含有套装效果，集齐可生效" or "Some equipment has suit effects that activate when collected"),

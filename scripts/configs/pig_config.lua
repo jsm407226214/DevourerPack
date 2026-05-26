@@ -75,38 +75,65 @@ config.pig_names = {
 }
 
 -- ============================================
--- 猪人属性成长配置（无限成长体系）
+-- 猪人属性成长配置
 -- ============================================
 config.growth = {
-    -- 经验与等级
-    exp_per_level = 500,        -- 每级所需经验
-    kill_exp_normal = 2,        -- 普通击杀经验
-    kill_exp_medium = 6,        -- 中型怪（HP≥200）
-    kill_exp_large = 10,        -- 大型怪（HP≥1000）
-    kill_exp_monster = 40,      -- Boss/史诗生物击杀
-    min_eat_interval = 240,     -- 最少吃东西间隔（秒）
-    work_exp = 1,               -- 砍树/挖矿经验（每次）
-    work_exp_interval = 10,     -- 每N次工作才+1经验（一颗大树约+1~2）
+    -- ========== 经验与等级 ==========
+    max_level = 30,                   -- 最大等级
+    min_eat_interval = 240,           -- 自动找食物吃间隔（秒）
+
+    -- ========== 经验与等级 ==========
+    -- 分段经验曲线（1-10级平缓，11-20级中等，21-30级陡峭）
+    -- 这样设计让前期升级快给玩家正反馈，后期升级慢让死亡更有代价
+    getExpPerLevel = function(level)
+        if level <= 10 then
+            -- 1-10级: 基础150，每级+20
+            return 150 + (level - 1) * 20
+        elseif level <= 20 then
+            -- 11-20级: 基础250，每级+30
+            return 250 + (level - 11) * 30
+        else
+            -- 21-30级: 基础450，每级+40
+            return 450 + (level - 21) * 40
+        end
+    end,
+
+    -- 击杀经验动态公式
+    kill_exp_base = 2,                -- 基础击杀经验
+    kill_exp_hp_pow = 0.5,            -- HP指数（平方根）
+    kill_exp_atk_pow = 0.3,           -- 攻击力指数
+    kill_exp_boss_multiplier = 4,     -- Boss倍率
+    kill_exp_max = 200,               -- 单次击杀经验上限
+
+    -- 工作/生存经验
+    work_exp = 2,                     -- 砍树/挖矿经验（每次完成增加）
+    survival_exp_interval = 120,      -- 生存经验间隔（秒）
+    survival_exp = 5,                 -- 每2分钟+5经验
 
     -- 进食经验
-    eat_exp_raw_meat = 2,       -- 生肉
-    eat_exp_raw_veggie = 1,     -- 生素
-    eat_exp_prepared_meat = 5,  -- 肉料理
-    eat_exp_prepared_veggie = 3,-- 素料理
-    eat_exp_favorite = 10,      -- 最爱料理
+    eat_exp_raw_meat = 2,
+    eat_exp_raw_veggie = 1,
+    eat_exp_prepared_meat = 5,
+    eat_exp_prepared_veggie = 3,
+    eat_exp_favorite = 10,
 
-    -- 猪人最爱料理（吃这些额外+10经验）
+    -- 猪人最爱料理
     favorite_foods = {
         bonestew = true,        -- 炖肉汤
         baconeggs = true,       -- 培根煎蛋
         honeyham = true,        -- 蜜汁火腿
         turkeydinner = true,    -- 火鸡正餐
+        meatballs = true,       -- 肉丸
+        perogies = true,        -- 波兰水饺
+        fishsticks = true,      -- 炸鱼排
+        meatysalad = true,      -- 牛肉绿叶菜
+        leafloaf = true,        -- 叶肉糕
     },
 
-    -- 基础属性
+    -- ========== 基础属性（1级时） ==========
     base_health = 300,
     base_attack = 20,
-    base_run_speed = 9,
+    base_run_speed = 6,
     base_walk_speed = 3,
     base_range = 2,
     base_defense = 0,
@@ -116,39 +143,134 @@ config.growth = {
     base_planar_attack = 0,
     base_planar_defense = 0,
 
-    -- === 无限成长属性（每级增量） ===
-    attack_per_level = 2,               -- 攻击力
-    planar_attack_per_level = 1,        -- 位面攻击（解锁后）
-    planar_defense_per_level = 1,       -- 位面防御（解锁后）
-    range_per_level = 0.1,              -- 攻击距离
-    freeze_resist_per_level = 1,        -- 冰冻抗性
-    blood_sucking_per_level = 0.002,    -- 吸血比例（0.2%/级）
-    area_attack_per_level = 0.02,       -- 范围伤害比例（2%/级）
+    -- ========== 每级增量 ==========
+    health_per_level = 80,            -- 每级+80生命
+    attack_per_level = 2.5,           -- 每级+2.5攻击
+    range_per_level = 0.05,           -- 每级+0.05攻击距离
+    max_attack_range = 3.5,           -- 攻击距离上限
+    freeze_resist_per_level = 0.5,    -- 每级+0.5冰冻抗性
 
-    -- 属性解锁等级（达到该等级后才能获得对应属性增长）
-    unlock_planar = 5,                  -- 位面攻击/防御解锁等级
-    unlock_blood_sucking = 3,           -- 吸血解锁等级
-    unlock_area_attack = 10,            -- 范围伤害解锁等级
+    -- 防御曲线（10级前线性，之后衰减，上限90%）
+    defense_growth = {
+        per_level = 0.04,
+        diminish_start = 10,
+        diminish_rate = 0.5,
+        max_defense = 0.90,
+    },
+    max_defense = 0.90,               -- 兼容旧引用
 
-    -- === 有上限的属性 ===
-    defense_per_level = 0.02,           -- 每级+2%伤害吸收
-    max_defense = 0.95,                 -- 伤害吸收上限95%
-    run_speed_per_level = 0.3,          -- 跑步速度每级增量
-    walk_speed_per_level = 0.1,         -- 走路速度每级增量
-    max_run_speed = 10,                 -- 跑步速度上限
-    max_walk_speed = 4,                 -- 走路速度上限
-    max_attack_range = 5,               -- 攻击距离上限
-    health_per_level = 100,             -- 每级生命值增量
+    -- 速度
+    run_speed_per_level = 0.3,        -- 每级+0.3跑速
+    max_run_speed = 12,
+    walk_speed_per_level = 0.15,       -- 每级+0.15走速
+    max_walk_speed = 6,
 
-    -- === 连击（普攻次数，不含终结击） ===
-    combo_base = 1,                     -- 基础普攻次数（终结击始终追加在最后）
-    combo_per_levels = 3,               -- 每N级+1普攻
-    combo_max = 5,                      -- 最大普攻次数
+    -- 吸血（3级解锁，每级+0.5%，上限15%）
+    unlock_blood_sucking = 3,
+    blood_sucking_per_level = 0.005,
+    max_blood_sucking = 0.15,
 
-    -- === 攻击速度（连击间隔递减） ===
-    attack_interval_base = 8,           -- 基础连击间隔（帧）
-    attack_interval_per_levels = 5,     -- 每N级间隔-1帧
-    attack_interval_min = 2,            -- 最小连击间隔（帧，不会到0，多个DoAttack挤在同一帧无意义）
+    -- 范围伤害（5级解锁，每级+3%，上限60%）
+    unlock_area_attack = 5,
+    area_attack_per_level = 0.03,
+    max_area_attack = 0.60,
+
+    -- 位面属性（8级解锁，每级+1.2，上限25）
+    unlock_planar = 8,
+    planar_attack_per_level = 1.2,
+    max_planar_attack = 25,
+    planar_defense_per_level = 1.2,
+    max_planar_defense = 25,
+
+    -- 攻击速度（基础8帧，每4级-1帧，最低3帧）
+    attack_interval_base = 8,
+    attack_interval_per_levels = 4,
+    attack_interval_min = 3,
+}
+
+-- 预计算累加经验（GetPigLevel 查表用）
+config._cum_exp = { [1] = 0 }
+do
+    local total = 0
+    for lv = 2, config.growth.max_level do
+        total = total + config.growth.getExpPerLevel(lv)
+        config._cum_exp[lv] = total
+    end
+end
+
+-- 死亡惩罚节点（这些等级死亡时节点标记，但不额外多掉）
+config.death_penalty_nodes = { [5] = true, [10] = true, [15] = true, [20] = true, [25] = true, [30] = true }
+
+-- ============================================
+-- 等级突破条件
+-- ============================================
+-- 位面Boss列表（用于位面击杀判定）
+config.planar_boss_list = {
+    mutatedbearger = true,
+    mutateddeerclops = true,
+    mutatedwarg = true,
+}
+config.level_breakthrough = {
+    [5] = {
+        conditions = {
+            { type = "total_kills", count = 20, desc = "BREAKTHROUGH_TOTAL_KILLS" },
+            { type = "eat_count", count = 10, desc = "BREAKTHROUGH_EAT_COUNT" },
+            { type = "survival_days", count = 5, desc = "BREAKTHROUGH_SURVIVAL_DAYS" },
+        },
+        desc = "掌握基础生存能力",
+    },
+    [10] = {
+        conditions = {
+            { type = "kill_elite", count = 5, desc = "BREAKTHROUGH_KILL_ELITE" },
+            { type = "work_count", count = 30, desc = "BREAKTHROUGH_WORK_COUNT" },
+            { type = "survival_days", count = 10, desc = "BREAKTHROUGH_SURVIVAL_DAYS" },
+        },
+        desc = "证明自己的价值",
+    },
+    [15] = {
+        conditions = {
+            { type = "kill_elite", count = 15, desc = "BREAKTHROUGH_KILL_ELITE" },
+            { type = "eat_favorite_count", count = 5, desc = "BREAKTHROUGH_EAT_FAVORITE" },
+            { type = "survival_days", count = 15, desc = "BREAKTHROUGH_SURVIVAL_DAYS" },
+        },
+        desc = "面对强敌的勇气",
+    },
+    [20] = {
+        conditions = {
+            { type = "boss_kill", count = 1, desc = "BREAKTHROUGH_BOSS_KILL" },
+            { type = "kill_large", count = 8, desc = "BREAKTHROUGH_KILL_LARGE" },
+            { type = "total_kills", count = 150, desc = "BREAKTHROUGH_TOTAL_KILLS" },
+            { type = "survival_days", count = 20, desc = "BREAKTHROUGH_SURVIVAL_DAYS" },
+        },
+        desc = "独当一面的战士",
+    },
+    [25] = {
+        conditions = {
+            { type = "eat_favorite_count", count = 10, desc = "BREAKTHROUGH_EAT_FAVORITE" },
+            { type = "boss_kill", count = 3, desc = "BREAKTHROUGH_BOSS_KILL" },
+            { type = "total_kills", count = 300, desc = "BREAKTHROUGH_TOTAL_KILLS" },
+            { type = "survival_days", count = 25, desc = "BREAKTHROUGH_SURVIVAL_DAYS" },
+        },
+        desc = "挑战更强大的敌人",
+    },
+    [30] = {
+        conditions = {
+            { type = "survival_days", count = 30, desc = "BREAKTHROUGH_SURVIVAL_DAYS" },
+            { type = "planar_boss", count = 1, desc = "BREAKTHROUGH_PLANAR_BOSS" },
+            { type = "boss_kill", count = 5, desc = "BREAKTHROUGH_BOSS_KILL" },
+            { type = "total_kills", count = 500, desc = "BREAKTHROUGH_TOTAL_KILLS" },
+        },
+        desc = "传说中的猪人战士",
+    },
+}
+
+-- ============================================
+-- 30级后无限成长
+-- ============================================
+config.infinite_growth = {
+    enabled = true,
+    exp_per_hp = 10,     -- 每100经验+1生命上限
+    max_hp_cap = 10000,   -- 最高生命上限
 }
 
 -- ============================================
@@ -213,7 +335,7 @@ config.dialogue = {
         "俺的牙都要香掉了！",
     },
 
-    death = "猪人守护者阵亡！经验值减少20%",
+    death = "猪人守护者阵亡！等级下降！",
 }
 
 return config

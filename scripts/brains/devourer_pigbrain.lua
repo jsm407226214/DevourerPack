@@ -10,9 +10,9 @@ local pig_config = require("configs/pig_config")
 
 -- 跟随距离：猪在 MIN~MAX 之间活动，TARGET 是最佳距离
 -- 超过 MAX 会跑回 leader，小于 MIN 会退开
-local MIN_FOLLOW_DIST = 2     -- 最近距离（不挤到玩家）
-local TARGET_FOLLOW_DIST = 8  -- 目标距离
-local MAX_FOLLOW_DIST = 20    -- 最远距离（超过就跑回来）
+local MIN_FOLLOW_DIST = 1     -- 最近距离（不挤到玩家）
+local TARGET_FOLLOW_DIST = 3  -- 目标距离
+local MAX_FOLLOW_DIST = 16    -- 最远距离（超过就跑回来）
 local SEE_FOOD_DIST = 15
 local MAX_CHASE_TIME = 15
 local MAX_CHASE_DIST = 40     -- 追击距离

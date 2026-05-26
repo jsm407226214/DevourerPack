@@ -10,6 +10,11 @@ return function(Devourer)
 -- 局部辅助函数
 -- ============================================
 
+local function SyncLevelExp(self)
+    local lv = self:GetPigLevel(self.pig_state.total_exp)
+    self.pig_state.level_exp = self.pig_state.total_exp - (pig_config._cum_exp[lv] or 0)
+end
+
 local function SavePigHat(self)
     local pig = self.pig_state.pig
     if not (pig and pig:IsValid() and pig.components.inventory) then
@@ -24,28 +29,19 @@ local function SavePigHat(self)
     end
 end
 
-local function GetPigFromLeader(owner)
-    if not (owner and owner.components.leader and owner.components.leader.followers) then return end
-    for pig, bool in pairs(owner.components.leader.followers) do
-        if pig and pig:IsValid() and pig.prefab and string.find(pig.prefab, "devourer_pig") and bool then
-            return pig
-        end
-    end
-end
-
 local function LinkPig(self, pig, owner)
     if not (pig and pig:IsValid()) then return end
 
     -- 设置名字（持久化）
     if self.pig_state.name then
-        pig.displayname = self.pig_state.name
+        pig.components.named:SetName(self.pig_state.name)
     else
         local names = pig_config.pig_names
         self.pig_state.name = names[math.random(#names)]
-        pig.displayname = self.pig_state.name
+        pig.components.named:SetName(self.pig_state.name)
     end
 
-    pig:ProcessKill(true, self.pig_state.kill_count)
+    pig:ProcessKill(true, self.pig_state.total_exp)
 
     if owner then
         owner.components.leader:AddFollower(pig)
@@ -73,6 +69,7 @@ local function LinkPig(self, pig, owner)
 
     self.inst:ListenForEvent("death", self._onpigdeath, pig)
     self.inst:ListenForEvent("killed", self._onpigkilled, pig)
+    self.inst:ListenForEvent("onhitother", self._onpighit, pig)
     self.pig_state.pig = pig
 end
 
@@ -118,28 +115,83 @@ end
 
 function Devourer:GetPigLevel(count)
     if not count or count <= 0 then return 1 end
-    return math.floor((count - 1) / pig_config.growth.exp_per_level) + 1
+    local cum = pig_config._cum_exp
+    for lv = pig_config.growth.max_level, 2, -1 do
+        if count > cum[lv] then return lv end
+    end
+    return pig_config.growth.max_level
 end
 
 function Devourer:IsPigLevelUp(oldCount, newCount)
     return self:GetPigLevel(oldCount) < self:GetPigLevel(newCount)
 end
 
+-- 获取单个突破条件的当前进度
+local function GetBreakthroughProgress(ps, cond)
+    if cond.type == "boss_kill" then
+        -- 种类判定：boss_kill_list 去重计数
+        local count = 0
+        for _ in pairs(ps.boss_kill_list or {}) do count = count + 1 end
+        return count
+    elseif cond.type == "eat_favorite_count" then
+        -- 种类判定：eat_favorite_types 去重计数
+        local count = 0
+        for _ in pairs(ps.eat_favorite_types or {}) do count = count + 1 end
+        return count
+    else
+        return ps[cond.type] or 0
+    end
+end
+
+-- 检查等级突破条件
+function Devourer:CheckBreakthrough(target_level)
+    local bt = pig_config.level_breakthrough[target_level]
+    if not bt then return true end
+    for _, cond in ipairs(bt.conditions) do
+        local current = GetBreakthroughProgress(self.pig_state, cond)
+        if current < cond.count then
+            local desc_key = cond.desc or ""
+            local desc = STRINGS.DEVOURER_PIG_MESSAGES[desc_key] or desc_key
+            return false, string.format(desc, current .. "/" .. cond.count)
+        end
+    end
+    return true
+end
+
+-- 30级后无限成长：超出经验每N点+1血上限
+local function GetInfiniteBonusHP(count)
+    local max_exp = pig_config._cum_exp[pig_config.growth.max_level]
+    if not pig_config.infinite_growth.enabled or count <= max_exp then return 0 end
+    return math.floor((count - max_exp) / pig_config.infinite_growth.exp_per_hp)
+end
+
 -- ============================================
 -- 猪人经验与升级
 -- ============================================
 
-function Devourer:PigEat(pig)
-    local oldCount = self.pig_state.kill_count
-    self.pig_state.kill_count = self.pig_state.kill_count + 1
-    local newCount = self.pig_state.kill_count
+function Devourer:PigEat(pig, food)
+    local oldCount = self.pig_state.total_exp
+    self.pig_state.total_exp = self.pig_state.total_exp + 1
+    local newCount = self.pig_state.total_exp
 
     if self:IsPigLevelUp(oldCount, newCount) then
-        self.pig_state.kill_count = oldCount
-        return false
+        local newLevel = self:GetPigLevel(newCount)
+        if not self:CheckBreakthrough(newLevel) then
+            self.pig_state.total_exp = oldCount
+            SyncLevelExp(self)
+            return false
+        end
     end
 
-    pig:ProcessKill(true, self.pig_state.kill_count)
+    SyncLevelExp(self)
+    self.pig_state.eat_count = (self.pig_state.eat_count or 0) + 1
+    if food and pig_config.growth.favorite_foods[food.prefab] then
+        self.pig_state.eat_favorite_count = (self.pig_state.eat_favorite_count or 0) + 1
+        self.pig_state.eat_favorite_types = self.pig_state.eat_favorite_types or {}
+        self.pig_state.eat_favorite_types[food.prefab] = true
+    end
+
+    pig:ProcessKill(true, self.pig_state.total_exp)
     return true
 end
 
@@ -152,53 +204,64 @@ function Devourer:PigKilled(inst, data)
 
     local victim = data.victim
     local prefab = victim.prefab
-    local oldCount = self.pig_state.kill_count
+    local oldCount = self.pig_state.total_exp
     local hp = victim.components.health.maxhealth
-    -- 击杀经验分层：Boss > 大型 > 中型 > 小型
-    local addKill
-    if victim:HasTag("epic") then
-        addKill = pig_config.growth.kill_exp_monster
-    elseif hp >= 1000 then
-        addKill = pig_config.growth.kill_exp_large
-    elseif hp >= 200 then
-        addKill = pig_config.growth.kill_exp_medium
-    else
-        addKill = pig_config.growth.kill_exp_normal
-    end
-    self.pig_state.kill_count = self.pig_state.kill_count + addKill
-    local newCount = self.pig_state.kill_count
+    local atk = (victim.components.combat and victim.components.combat.defaultdamage) or 20
+    local is_boss = victim:HasTag("epic")
 
-    if victim:HasTag("epic") then
+    -- 动态击杀经验
+    local cfg = pig_config.growth
+    local hp_factor = math.pow(hp / 100, cfg.kill_exp_hp_pow)
+    local atk_factor = math.pow(atk / 20, cfg.kill_exp_atk_pow)
+    local boss_factor = is_boss and cfg.kill_exp_boss_multiplier or 1
+    local addKill = math.min(math.floor(cfg.kill_exp_base * hp_factor * atk_factor * boss_factor), cfg.kill_exp_max)
+
+    self.pig_state.total_exp = self.pig_state.total_exp + addKill
+    local newCount = self.pig_state.total_exp
+    SyncLevelExp(self)
+
+    -- 宠物统计
+    self.pig_state.total_kills = (self.pig_state.total_kills or 0) + 1
+    if hp >= 200 then self.pig_state.kill_elite = (self.pig_state.kill_elite or 0) + 1 end
+    if hp >= 800 then self.pig_state.kill_large = (self.pig_state.kill_large or 0) + 1 end
+
+    if is_boss then
         self.pig_state.level_up_monsters[prefab] = (self.pig_state.level_up_monsters[prefab] or 0) + 1
+        self.pig_state.boss_kill = (self.pig_state.boss_kill or 0) + 1
+        self.pig_state.boss_kill_list[prefab] = true
+        if not self.pig_state._boss_hit_set then self.pig_state._boss_hit_set = {} end
+        if not self.pig_state._boss_hit_set[victim.GUID] then
+            self.pig_state._boss_hit_set[victim.GUID] = true
+            self.pig_state.boss_assist = (self.pig_state.boss_assist or 0) + 1
+        end
+        if pig_config.planar_boss_list[victim.prefab] then
+            self.pig_state.planar_boss = (self.pig_state.planar_boss or 0) + 1
+        end
     end
 
-    -- ============================================
-    -- Boss 等级突破机制：
-    --   猪人获得经验后会检查是否升级。
-    --   升级条件：击杀过 ≥(目标等级-1) 种不同 Boss。
-    --   例：升到 LV2 需要杀过 1 种 Boss，升到 LV5 需要杀过 4 种。
-    --   不满足条件 → 经验锁定在当前等级上限，无法升级。
-    --   Boss 种类记录在 pig_state.level_up_monsters[prefab] 中。
-    -- ============================================
+    -- 等级突破条件检查
     if self:IsPigLevelUp(oldCount, newCount) then
         local newLevel = self:GetPigLevel(newCount)
-        local requiredBossCount = newLevel - 1   -- 需要击杀的不同 Boss 数量
-        local currentBossCount = 0
-        for _, count in pairs(self.pig_state.level_up_monsters) do
-            if count > 0 then currentBossCount = currentBossCount + 1 end
-        end
-        if currentBossCount < requiredBossCount then
-            -- 不满足条件，经验锁定于当前等级上限
-            self.pig_state.kill_count = self:GetPigLevel(oldCount) * pig_config.growth.exp_per_level
+        if not self:CheckBreakthrough(newLevel) then
+            local oldLevel = self:GetPigLevel(oldCount)
+            self.pig_state.total_exp = pig_config._cum_exp[oldLevel + 1] or pig_config._cum_exp[pig_config.growth.max_level]
+            SyncLevelExp(self)
         end
     end
 
-    inst:ProcessKill(false, self.pig_state.kill_count)
+    inst:ProcessKill(false, self.pig_state.total_exp)
 end
 
 function Devourer:PigDeath()
     TheNet:Announce(pig_config.dialogue.death)
-    self.pig_state.kill_count = math.floor(self.pig_state.kill_count * 0.8)
+    local current_level = self:GetPigLevel(self.pig_state.total_exp)
+    if current_level <= 1 then
+        self.pig_state.total_exp = 0
+    else
+        local new_level = current_level - 1
+        self.pig_state.total_exp = pig_config._cum_exp[new_level] or 0
+    end
+    SyncLevelExp(self)
     self.pig_state.alive = false
     self:Unsummon()  -- 面板显示关闭
     self:SetEnabFalse("pig_coin")
@@ -233,6 +296,7 @@ function Devourer:Summon(synctoreplica)
     end
     self.control_switch.PigSummon = 2
     self:CancelPigHealthRegen()
+    self:StartPigSurvivalTimer()
     if synctoreplica then
         self:_SyncControlsToReplica()
     end
@@ -243,7 +307,7 @@ function Devourer:Unsummon(keep_flag)
     if pig and pig:IsValid() and not IsEntityDead(pig) then
         self.pig_state.health = pig.components.health.currenthealth
         self.pig_state.max_health = pig.components.health.maxhealth
-        self.pig_state.name = pig.displayname or self.pig_state.name
+        self.pig_state.name = self.pig_state.name
         self.pig_state.variation = pig.pig_variation or self.pig_state.variation
         SavePigHat(self)
         pig._should_despawn = true
@@ -257,6 +321,7 @@ function Devourer:Unsummon(keep_flag)
         self.control_switch.PigSummon = 1
     end
     self.pig_state.pig = nil
+    self:CancelPigSurvivalTimer()
 end
 
 function Devourer:ChangePigSummon(value)
@@ -299,6 +364,39 @@ function Devourer:CancelPigHealthRegen()
         self.pig_state.health_regen_task:Cancel()
         self.pig_state.health_regen_task = nil
     end
+end
+
+-- 生存计时（每120秒+5经验，+1生存天数）
+function Devourer:StartPigSurvivalTimer()
+    if self.pig_state._survival_watcher_set then return end
+    self.pig_state._survival_watcher_set = true
+    self.inst:WatchWorldState("cycles", function(inst, cycles)
+        local pig = self.pig_state.pig
+        if not (pig and pig:IsValid() and not IsEntityDead(pig)) then return end
+        if cycles == self.pig_state._last_survival_cycle then return end
+        self.pig_state._last_survival_cycle = cycles
+        local oldCount = self.pig_state.total_exp
+        self.pig_state.total_exp = self.pig_state.total_exp + pig_config.growth.survival_exp
+        if self:IsPigLevelUp(oldCount, self.pig_state.total_exp) then
+            local newLevel = self:GetPigLevel(self.pig_state.total_exp)
+            if not self:CheckBreakthrough(newLevel) then
+                local oldLevel = self:GetPigLevel(oldCount)
+                self.pig_state.total_exp = pig_config._cum_exp[oldLevel + 1] or pig_config._cum_exp[pig_config.growth.max_level]
+            end
+        end
+        SyncLevelExp(self)
+        self.pig_state.survival_days = (self.pig_state.survival_days or 0) + 1
+        pig:ProcessKill(true, self.pig_state.total_exp)
+        if pig.components.talker then
+            pig.components.talker:Say(
+                string.format(STRINGS.DEVOURER_PIG_MESSAGES.SURVIVAL_EXP, pig_config.growth.survival_exp))
+        end
+    end)
+end
+
+function Devourer:CancelPigSurvivalTimer()
+    -- WatchWorldState 无需取消，仅在 Unsummon 时清空追踪状态
+    self.pig_state._last_survival_cycle = nil
 end
 
 end -- 返回的函数结束
