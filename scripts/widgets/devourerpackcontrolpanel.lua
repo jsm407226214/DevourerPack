@@ -128,6 +128,22 @@ function DevourerPackControlPanel:GenerateUniqueID()
     return self.callback_id
 end
 
+-- 获取玩家当前实际装备的吞噬者背包（防止互换背包后面板引用旧对象）
+function DevourerPackControlPanel:GetCurrentDevourerPack()
+    return self.player and add_utils.GetDevourerPack(self.player)
+end
+
+-- 清除待处理的RPC回调和超时任务（背包变更后旧回调已失效）
+function DevourerPackControlPanel:ClearPendingCallbacks()
+    self.callback_map = {}
+    for id, task in pairs(self.active_tasks) do
+        if task then
+            task:Cancel()
+        end
+    end
+    self.active_tasks = {}
+end
+
 -- 构建根节点和背景
 function DevourerPackControlPanel:BuildRoot()
     -- 面板根节点
@@ -409,13 +425,27 @@ end
 
 -- 刷新内容
 function DevourerPackControlPanel:RefreshContent()
+    -- 每次刷新前先校验当前背包，防止互换后仍显示旧背包数据
+    local current_pack = self:GetCurrentDevourerPack()
+    if current_pack and current_pack ~= self.devourer_pack then
+        self:ClearPendingCallbacks()
+        self.devourer_pack = current_pack
+        self:RefreshConfigData(current_pack)
+    end
+
+    if not self.devourer_pack then
+        add_utils.debug_print("[RefreshContent] 当前没有装备吞噬者背包，关闭面板")
+        self:OnClose()
+        return
+    end
+
     -- 清除现有内容（模仿EquipUpdate中先检查再清理的方式）
     if self.buttons_container then
         self.buttons_container:Kill()
         self.buttons_container = nil
     end
     self.buttons_container = self.content:AddChild(Widget("buttons_container"))
-    
+
     -- 根据当前页面显示不同内容
     if self.current_page == "control" then
         self:ShowControlPage()
@@ -1369,15 +1399,24 @@ end
 
 function DevourerPackControlPanel:OnOpen(devourer_pack)
     add_utils.debug_print("进入OnOpen，准备开启吞噬者背包控制面板")
-    self.devourer_pack = devourer_pack
+
+    -- 重新解析玩家当前实际装备的背包，防止互换/丢弃后面板引用旧对象
+    local current_pack = self:GetCurrentDevourerPack()
+    self.devourer_pack = current_pack or devourer_pack
+    if not self.devourer_pack then
+        add_utils.debug_print("未找到吞噬者背包，无法打开控制面板")
+        return
+    end
+
     -- 注册全局监听器（绑定到玩家身上）
     self:RegisterGlobalListener()
-    
+
     -- 执行原OnOpen的逻辑
-    self:RefreshConfigData(devourer_pack)
+    self:RefreshConfigData(self.devourer_pack)
     self:RefreshContent()
     self:Show() -- 显示面板
     self.isopen = true
+
     add_utils.debug_print("开启吞噬者背包控制面板完毕")
 end
 
@@ -1392,21 +1431,8 @@ function DevourerPackControlPanel:OnClose()
         self.player._devourer_pack_control_updated = nil
     end
     
-    -- -- 清理背包上的升级效果监听器
-    -- if self.devourer_pack and self.devourer_pack._devourer_pack_upgrade_updated then
-    --     self.devourer_pack:RemoveEventCallback("devourer_upgrade_effects_updated", self.devourer_pack._devourer_pack_upgrade_updated)
-    --     self.devourer_pack._devourer_pack_upgrade_updated = nil
-    -- end
-    
     -- 清理所有回调和任务（模仿EquipUpdate的清理逻辑）
-    self.callback_map = {}
-    
-    for id, task in pairs(self.active_tasks) do
-        if task then
-            task:Cancel()
-        end
-    end
-    self.active_tasks = {}
+    self:ClearPendingCallbacks()
 
     -- 清理按钮容器
     if self.buttons_container then

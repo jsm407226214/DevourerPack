@@ -6,6 +6,119 @@ local shared = require("components/devourer/shared")
 
 return function(Devourer)
 
+local function WakeUp(owner)
+    if not owner or not owner:IsValid() or not owner.components.health or owner.components.health:IsDead() then return end
+
+    -- 如果 heal task 还在 owner 身上，取消它
+    if owner._sleep_heal_task then
+        owner._sleep_heal_task:Cancel()
+        owner._sleep_heal_task = nil
+    end
+
+    if owner.sg:HasStateTag("sleeping") or owner.sg:HasStateTag("bedroll") then
+        owner.sg.statemem.iswaking = true
+        owner.sg:GoToState("wakeup")
+    end
+end
+
+local function StartSleepHeal(self)
+    local stats = self.stats
+    if not stats then return end
+    local inst = self.inst
+    local owner = inst.components.inventoryitem and inst.components.inventoryitem.owner
+    if not owner then return end
+
+    -- 取消旧任务（可能在 owner 身上残留）
+    if owner._sleep_heal_task then
+        owner._sleep_heal_task:Cancel()
+        owner._sleep_heal_task = nil
+    end
+
+    owner._sleep_heal_task = owner:DoPeriodicTask(1, function()
+        local hunger = owner.components.hunger
+        local health = owner.components.health
+        local sanity = owner.components.sanity
+        add_utils.debug_print("Sleep Heal Tick: Checking conditions. Hunger:", hunger and hunger.current or "nil", " Health:", health and health.current or "nil", " Sanity:", sanity and sanity.current or "nil")
+
+        local sleep_hunger_cost = stats.sleep_hunger_cost
+        local sleep_health = stats.sleep_health
+        local sleep_sanity = stats.sleep_sanity
+
+        add_utils.debug_print("Sleep Heal Tick: hunger cost =", sleep_hunger_cost, " health regen =", sleep_health, " sanity regen =", sleep_sanity)
+        if not hunger or not health or not sanity then return end
+
+        -- 饿到极限就强制醒来
+        if hunger:IsStarving() then
+            add_utils.debug_print("Hunger is starving, waking up")
+            WakeUp(owner)
+            return
+        end
+
+        if hunger.current >= sleep_hunger_cost then
+            hunger:DoDelta(-sleep_hunger_cost)
+        else
+            add_utils.debug_print("Not enough hunger, waking up")
+            WakeUp(owner)
+            return
+        end
+
+        -- 回血：效率越高回得越多
+        if health:GetPercentWithPenalty() < 1 then
+            -- add_utils.debug_print("Healing health by", sleep_health)
+            health:DoDelta(sleep_health)
+        end
+
+        -- 回精神
+        if sanity:GetPercentWithPenalty() < 1 then
+            -- add_utils.debug_print("Healing sanity by", sleep_sanity)
+            sanity:DoDelta(sleep_sanity)
+        end
+        -- 如果血量和精神都满了，也醒来
+        if health:GetPercentWithPenalty() >= 1 and sanity:GetPercentWithPenalty() >= 1 then
+            add_utils.debug_print("Health and sanity fully healed, waking up")
+            WakeUp(owner)
+            return
+        end
+    end)
+end
+
+
+-- 控制睡觉
+function Devourer:ChangeSleep(sleep)
+    local msg = nil
+    local stats = self.stats
+    local owner = self.inst.components.inventoryitem.owner
+    if not owner or not owner:IsValid() or not owner.components.health or owner.components.health:IsDead() then return end
+    if not stats then return end
+
+    if sleep then
+        if owner.sg:HasStateTag("sleeping") or owner.sg:HasStateTag("bedroll") then
+            return
+        end
+
+        add_utils.debug_print("当前时间：", TheWorld.state.isdusk and "黄昏" or TheWorld.state.isnight and "夜晚" or "白天", " 是否洞穴：", TheWorld:HasTag("cave") and "是" or "否")
+        add_utils.debug_print("睡觉条件：夜晚睡觉=", stats.night_sleep, " 白天睡觉=", stats.daytime_sleep)
+        -- 根据时间段和是否洞穴判断是否允许睡觉
+        if TheWorld.state.isdusk or TheWorld.state.isnight or TheWorld:HasTag("cave") then -- 黄昏夜晚或洞穴
+            if not stats.night_sleep then msg = STRINGS.DP_DevourerPack.SLEEP.night_error return msg end
+        else
+            if not stats.daytime_sleep then msg = STRINGS.DP_DevourerPack.SLEEP.daytime_error return msg end
+        end
+
+        -- 进入视觉状态
+        owner.sg:GoToState("devourer_pack_bedroll")
+
+        -- 启动恢复逻辑
+        StartSleepHeal(self)
+        -- if owner.components.talker then
+        --      owner.components.talker:Say(STRINGS.DP_DevourerPack.SLEEP.sleep_msg)
+        -- end
+    else
+        add_utils.debug_print("尝试醒来，当前状态：", owner.sg:HasStateTag("sleeping") and "睡觉中" or "非睡觉状态")
+        WakeUp(owner)
+    end
+end
+
 -- ============================================
 -- 控制功能相关方法
 -- ============================================
@@ -65,6 +178,15 @@ function Devourer:ChangeControlSwitch(key, value)
         self.control_switch[key] = value
         self:ApplyWaterproof(value == 2)
         result.success = true
+    elseif key == "SleepAnywhere" then
+        result.reason = self:ChangeSleep(value == 1) -- 睡觉开关
+        if result.reason then
+            result.success = false
+            result.value = 0
+        else
+            result.success = true
+            self.control_switch[key] = value -- 睡觉成功了才变化状态
+        end
     else
         result.reason = "未知的控制开关键:"..key
         result.success = false
@@ -193,7 +315,7 @@ function Devourer:SetControl(key, value, callback_id, is_hotkey)
                     break
                 end
             end
-            if self.inst.components.talker and option_text ~= "" then
+            if self.inst.components.talker and option_text ~= "" and key ~= "SleepAnywhere" then
                 self.inst.components.talker:Say(string.format("已切换至：%s [%s]", control_config.name, option_text))
             end
         end

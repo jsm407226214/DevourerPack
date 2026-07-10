@@ -145,6 +145,12 @@ config.level_up = {
             carnivore = true,                   -- 肉食者（小鱼妹可以吃肉食）
             appetizer = true,                   -- 开胃菜（不挑食）
             badluck = true,                     -- 霉运
+            night_sleep = true,                 -- 夜晚睡眠
+            daytime_sleep = true,               -- 白天睡眠
+            sleep_health = true,                -- 睡觉回血
+            sleep_sanity = true,               -- 睡觉恢复精神
+            sleep_hunger_cost = true,          -- 睡觉饥饿消耗
+            dp_spore_immunity = true,          -- 孢子腐烂免疫
         }
     },
     lv2 = {
@@ -417,7 +423,6 @@ config.upgrade_effects = {
     malbatross_feathered_weave = { treadwater = 1 }, -- 羽毛帆布/Feathery Canvas
     shadowheart = { voidwalk = 1 }, -- 暗影心房/Shadow Atrium
     shadowheart_infused = { voidwalk = 1 }, -- 附身暗影心房/Possessed Shadow Atrium
-    panflute = { sleep_res = 5 }, -- 排箫/Pan Flute
     atrium_key = { voidwalk = 1, not_remove = true }, -- 远古钥匙/Ancient Key
     antlionhat = { walksinkhole = true, stronghead = 1 }, -- 刮地皮头盔/Turf-Raiser Helm
     wagdrone_rolling = { chopwork = 0.2, minework = 0.2 },   -- 螨地爬/Terramite
@@ -549,6 +554,8 @@ config.upgrade_effects = {
     yoth_lance = { speed = 0.05, damage = 1,event = "YOTH" }, -- 冲锋骑枪/
     horseshoe = { luck = 0.05, max = 15, event = "YOTH" },  -- 幸运马蹄铁/Horseshoe
 
+    shroom_skin = { dp_spore_immunity = true },  -- 蘑菇皮/Shroom Skin
+
 
     -- 不可移动的物品
     icepack = { no_move = true, preserver = 0.1, add_slot_cols = 1 },         -- 保鲜背包/Insulated Pack
@@ -583,6 +590,15 @@ config.upgrade_effects = {
     -- lunar_forge_kit = { lunar_forge = true, except = "lunar_forge" }, -- 辉煌铁匠铺套装/Brightsmithy Kit
     moon_altar_astral = { no_move = true, recipe2_moon = true, except = "moon_altar", not_remove = true, not_create = true }, -- 天体圣殿/Celestial Sanctum
     moon_altar = { no_move = true, recipe2_moon = true, except = "moon_altar_astral", not_remove = true, not_create = true }, -- 天体祭坛/Celestial Altar
+
+    -- 随地大小睡
+    tent = { no_move = true, night_sleep = true, sleep_health = 0.5, sleep_sanity = 0.25, sleep_hunger_cost = 0.5 }, -- 帐篷/Tent
+    portabletent_item = { night_sleep = true, sleep_health = 0.5, sleep_sanity = 0.25, sleep_hunger_cost = 0.5, role = "walter" }, -- 帐篷卷/Tent Roll
+    siestahut = { no_move = true, daytime_sleep = true, sleep_health = 0.5, sleep_sanity = 0.25, sleep_hunger_cost = 0.5 }, -- 遮阳篷/Siesta Lean-to
+    bedroll_straw = { sleep_health = 0.25, sleep_sanity = 0.25, sleep_hunger_cost = 0.25 }, -- 草席卷/Straw Roll
+    bedroll_furry = { sleep_health = 0.5, sleep_sanity = 0.25, sleep_hunger_cost = 0.5 }, -- 毛皮铺盖/Furry Roll
+    panflute = { sleep_res = 5, sleep_hunger_cost = -0.5 }, -- 排箫/Pan Flute
+    sleepbomb = { sleep_res = 10, sleep_hunger_cost = -0.5 }, --睡袋/Napsack
 }
 config.food_effects = {
     baconeggs = { hunger = 1.1, hp = 0.5 },  -- 培根煎蛋/Bacon and Eggs
@@ -762,8 +778,6 @@ for prefabKey, effect in pairs(config.upgrade_effects) do
         end
     end
     
-    -- 记录最终的show状态
-    -- print("[DevourerPack] Final show status for " .. prefabKey .. ": " .. tostring(effect.show))
 end
 
 config.suits = {

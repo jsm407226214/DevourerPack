@@ -175,6 +175,16 @@ STRINGS.DEVOURER_CONTROLS = {
         },
         order = 14,
         default = 2  -- 默认开启
+    },
+
+    SleepAnywhere = {
+        name = "随地大小睡",
+        options = {
+            { text = "关闭", value = 0 },
+            { text = "开启", value = 1 }
+        },
+        order = 15,
+        default = 0  -- 默认关闭
     }
 }
 
@@ -331,6 +341,12 @@ STRINGS.DP_DevourerPack = {
         REPEAT = "有我还不够吗？",
         ToPack = "你觉得自己很聪明?",
     },
+    SLEEP = {
+        daytime_error = "白天睡觉未开启！",
+        night_error = "夜晚睡觉未开启！",
+        sleep_msg = "早睡早起身体好!",
+        wakeup_msg = "苏醒了，猎杀时刻!",
+    },
     
     -- 效果描述
     EFFECTS = {
@@ -415,6 +431,7 @@ STRINGS.DP_DevourerPack = {
         repair_slot = "修复格+%d%%(60s)",
         luck = "幸运值+%s",
         badluck = "霉运值+%s",
+        dp_spore_immunity = "孢子腐烂免疫",
 
         
         hp = "血量上限+%g",
@@ -467,6 +484,13 @@ STRINGS.DP_DevourerPack = {
         recipe_lunar = "辉煌铁匠铺",
         recipe_shadow = "暗影术基座",
         recipe2_moon = "天体2级",
+
+
+        night_sleep = "夜晚睡觉",
+        daytime_sleep = "白天睡觉",
+        sleep_health = "睡觉回血+%g",
+        sleep_sanity = "睡觉恢复精神+%g",
+        sleep_hunger_cost = "睡觉饥饿消耗 %g",
     }
 }
 

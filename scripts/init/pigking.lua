@@ -55,12 +55,10 @@ if TUNING.DEVOURER_PIG_KING_MODIFY then
     local AREACLEAR_CHECK_FOR_HOSTILES = {"hostile", "monster"}
     local AREACLEAR_COMBAT = {"_combat"}
     local function IsAreaSafeForMinigame(inst, giver)
-        -- print("[PigKing] Checking area safety...")
         
         -- 检查猎犬袭击
         local hounded = TheWorld.components.hounded
         if hounded ~= nil and (hounded:GetWarning() or hounded:GetAttacking()) then
-            -- print("[PigKing] Area unsafe: hound attack in progress or imminent")
             return false
         end
         
@@ -68,7 +66,6 @@ if TUNING.DEVOURER_PIG_KING_MODIFY then
         if giver ~= nil then
             local burnable = giver.components.burnable
             if burnable ~= nil and (burnable:IsBurning() or burnable:IsSmoldering()) then
-                -- print("[PigKing] Area unsafe: giver is on fire or smoldering")
                 return false
             end
         end
@@ -76,82 +73,61 @@ if TUNING.DEVOURER_PIG_KING_MODIFY then
         -- 检查敌对生物
         local x, y, z = inst.Transform:GetWorldPosition()
         local ents = TheSim:FindEntities(x, y, z, TUNING.PIG_MINIGAME_ARENA_RADIUS * 2, nil, AREACLEAR_IGNORE_PLAYERS, AREACLEAR_CHECK_FOR_HOSTILES)
-        -- print(string.format("[PigKing] Found %d hostile/monster entities", #ents))
         if #ents > 0 then
-            -- print("[PigKing] Area unsafe: hostile entities present")
-            for i, ent in ipairs(ents) do
-                -- print(string.format("[PigKing] Hostile entity %d: %s (prefab: %s)", i, tostring(ent), ent.prefab))
-            end
             return false
         end
 
         -- 检查战斗状态
         local combat_ents = TheSim:FindEntities(x, y, z, TUNING.PIG_MINIGAME_ARENA_RADIUS * 2, nil, nil, AREACLEAR_COMBAT)
-        -- print(string.format("[PigKing] Found %d entities in combat", #combat_ents))
         for _, ent in ipairs(combat_ents) do
             if ent.components.combat:HasTarget() then
-                -- print(string.format("[PigKing] Combat entity: %s (prefab: %s) has target", tostring(ent), ent.prefab))
                 return false
             end
         end
 
-        -- print("[PigKing] Area is safe for minigame")
         return true
     end
 
     local function CanStartMinigame(inst, giver)
-        -- print("[PigKing] Checking if minigame can start...")
-        
         -- 检查时间条件
         if TheWorld.net ~= nil and TheWorld.net.components.clock ~= nil then
             local time_until_night = TheWorld.net.components.clock:GetTimeUntilPhase("night")
-            -- print(string.format("[PigKing] Time until night: %.1f, required: %.1f", time_until_night, TUNING.PIG_MINIGAME_REQUIRED_TIME))
             if time_until_night <= TUNING.PIG_MINIGAME_REQUIRED_TIME or inst.sg.mem.sleeping then
-                -- print("[PigKing] Cannot start: too close to night or pig king is sleeping")
                 return false, "PIGKINGGAME_TOOLATE"
             end
         end
         
         -- 检查区域清理
         if not IsAreaClearForMinigame(inst) then
-            -- print("[PigKing] Cannot start: area is not clear")
             return false, "PIGKINGGAME_MESSY"
         end
         
         -- 检查安全条件
         if not IsAreaSafeForMinigame(inst, giver) then
-            -- print("[PigKing] Cannot start: area is not safe")
             return false, "PIGKINGGAME_DANGER"
         end
         
         -- 检查是否已有小游戏进行
         if next(inst._minigame_elites) ~= nil then
-            -- print("[PigKing] Cannot start: minigame already in progress")
             return false
         end
         
-        -- print("[PigKing] All conditions met, minigame can start")
         return true
     end
 
     local function OnRefuseItem(inst, giver, item)
-        -- print(string.format("[PigKing] Refusing item: %s from %s", item.prefab, giver.prefab))
         inst.sg:GoToState("unimpressed")
     end
 
     local function AbleToAcceptTest(inst, item, giver)
-        -- print(string.format("[PigKing] AbleToAcceptTest for item: %s from %s", item.prefab, giver and giver.prefab or "nil"))
-        
         if item.prefab == "pig_token" then
             local success, reason = CanStartMinigame(inst, giver)
             if not success then
-                -- print(string.format("[PigKing] Cannot accept pig_token: %s", reason or "minigame already in progress"))
                 OnRefuseItem(inst, giver, item)
             end
             return success, reason
         end
         
-        -- print("[PigKing] Accepting non-pig_token item")
         return true
     end
 

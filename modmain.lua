@@ -24,6 +24,7 @@ modimport("scripts/init/combat_patches.lua")
 modimport("scripts/init/creature_patches.lua")
 modimport("scripts/init/tag_optimization.lua")
 modimport("scripts/init/network_rpc.lua")
+modimport("scripts/init/other_patches.lua")
 
 -- ============================================
 -- 测试模块（仅调试模式）

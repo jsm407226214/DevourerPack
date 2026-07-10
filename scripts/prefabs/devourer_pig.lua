@@ -113,7 +113,7 @@ local function ApplyLevelStats(inst, level)
     -- 冰冻抗性
     if inst.components.freezable then
         inst.components.freezable:SetResistance(
-            cfg.base_freeze_resist + (level - 1) * cfg.freeze_resist_per_level
+            math.max(1, cfg.base_freeze_resist + (level - 1) * cfg.freeze_resist_per_level)-- 最低1点，避免报错
         )
     end
 
@@ -573,7 +573,7 @@ local function MakePigEliteFighter(variation)
         inst.components.sleeper:SetWakeTest(ShouldWake)
 
         MakeMediumFreezableCharacter(inst, "pig_torso")
-        inst.components.freezable:SetDefaultWearOffTime(0)
+        inst.components.freezable:SetDefaultWearOffTime(1) -- 默认设置为1，避免能力勋章除这个导致报错（除数不能为零）
         inst.components.freezable.diminishingreturns = true
 
         MakeMediumBurnableCharacter(inst, "pig_torso")

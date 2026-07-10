@@ -31,7 +31,6 @@ for prefab, skins in pairs(SkinUtils.GetAllSkins()) do
     end
     for name, _ in pairs(skins) do
         --用于制作栏或者物品栏的皮肤图片
-        -- print("添加皮肤 " .. name .. " 到 " .. prefab)
         table.insert(Assets, Asset("ATLAS", "images/inventoryimages/" .. name .. ".xml"))
         env.RegisterInventoryItemAtlas("images/inventoryimages/" .. name .. ".xml", name .. ".tex")
         table.insert(Assets, Asset("ANIM", "anim/" .. name .. ".zip")) --动画，应该都有对应的动画文件吧
@@ -94,7 +93,6 @@ end
 local OldReskinEntity = getmetatable(TheSim).__index["ReskinEntity"]
 getmetatable(TheSim).__index["ReskinEntity"] = function(self, guid, skinname, linked_skinname, skin_id, userid, ...)
     local inst = Ents[guid]
-    -- print("ReskinEntity:", guid, skinname, linked_skinname, skin_id, userid, ...)
     if inst and skinname ~= linked_skinname then
         local d = SkinUtils.GetSkinData(skinname)
         if d and d.clear_fn then

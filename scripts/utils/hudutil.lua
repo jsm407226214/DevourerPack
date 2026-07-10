@@ -54,7 +54,6 @@ function h_util.CreatePopupWithClose(title, bodytext, btns)
     -- 处理按钮回调，自动添加关闭逻辑
     local processed_btns = {}
     for _, btn in ipairs(btns or {}) do
-        -- print("处理弹窗按钮，文本:", btn.text or "nil")
         table.insert(processed_btns, {
             text = btn.text or "确定",
             cb = function()

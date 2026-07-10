@@ -7,7 +7,7 @@ TUNING.DEVOURER_ICON = GetModConfigData("devourer_icon")
 -- 吞噬者背包最大格子
 TUNING.DEVOURER_PACK_MAX_SLOTS = GetModConfigData("devourer_pack_max_slots") or 1
 -- 吞噬者背包制作难度
-TUNING.RECIPE_DIFFICULTY = GetModConfigData("recipe_difficulty")
+TUNING.DP_RECIPE_DIFFICULTY = GetModConfigData("dp_recipe_difficulty")
 -- 可吞噬食物的最大次数
 TUNING.DEVOURER_PACK_FOOD_MAX = GetModConfigData("devourer_pack_food_max")
 -- 背包说话

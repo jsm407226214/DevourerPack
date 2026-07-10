@@ -175,6 +175,16 @@ STRINGS.DEVOURER_CONTROLS = {
         },
         order = 14,
         default = 2  -- Enabled by default
+    },
+
+    SleepAnywhere = {
+        name = "Sleep Anywhere",
+        options = {
+            { text = "Off", value = false },
+            { text = "On", value = true }
+        },
+        order = 15,
+        default = false  -- 默认关闭
     }
 }
 
@@ -325,6 +335,12 @@ STRINGS.DP_DevourerPack = {
         REPEAT = "Have I not been enough?",
         ToPack = "Do you think yourself is so smart?",
     },
+    SLEEP = {
+        daytime_error = "Daytime sleeping not enabled!",
+        night_error = "Nighttime sleeping not enabled!",
+        sleep_msg = "I need sleep!",
+        wakeup_msg = "I'm awake!",
+    },
     
     -- Effect descriptions
     EFFECTS = {
@@ -412,6 +428,7 @@ STRINGS.DP_DevourerPack = {
         hp = "maximum Health+%g",
         sanity = "maximum Sanity+%g",
         hunger = "maximum Hunger+%g",
+        dp_spore_immunity = "Spore Rot Immunity",
         
 
         miasmaimmune = "Miasma Immune",
@@ -459,6 +476,13 @@ STRINGS.DP_DevourerPack = {
         recipe_lunar = "Brightsmithy",
         recipe_shadow = "Shadowcraft Plinth",
         recipe2_moon = "Celestial Sanctum",
+
+        
+        night_sleep = "Night Sleep",
+        daytime_sleep = "Daytime Sleep",
+        sleep_health = "Sleep Health Regen+%g",
+        sleep_sanity = "Sleep Sanity Regen+%g",
+        sleep_hunger_cost = "Sleep Hunger Cost+%g",
     }
 }
 STRINGS.DP_DevourerPack.MOONROCK_CHECK = "Moonrock reveals the devourer's power:"

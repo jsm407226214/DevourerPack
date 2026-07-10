@@ -62,31 +62,25 @@ local execute_key = GetModConfigData("devourer_pack_execute_key")
 -- 功能切换：通过RPC调用服务端的SwitchControlFunction方法
 local function OnKeyDownSwitch()
     if not ThePlayer then 
-        print("[Switch] 错误: ThePlayer 不存在")
         return 
     end
-    print("[Switch] 功能切换键触发, 发送RPC到服务端")
     SendModRPCToServer(MOD_RPC["devourer_pack"]["SwitchControlFunction"])
 end
 
 -- 功能执行：通过RPC调用服务端的ExecuteControlFunction方法
 local function OnKeyDownExecute()
     if not ThePlayer then 
-        print("[Execute] 错误: ThePlayer 不存在")
         return 
     end
-    print("[Execute] 功能执行键触发, 发送RPC到服务端")
     SendModRPCToServer(MOD_RPC["devourer_pack"]["ExecuteControlFunction"])
 end
 
 -- 绑定功能切换键
 if switch_key ~= false then
-    print("绑定功能切换键", switch_key)
     TheInput.onkeydown:AddEventHandler(switch_key, OnKeyDownSwitch)
 end
 
 -- 绑定功能执行键
 if execute_key ~= false then
-    print("绑定功能执行键", execute_key)
     TheInput.onkeydown:AddEventHandler(execute_key, OnKeyDownExecute)
 end

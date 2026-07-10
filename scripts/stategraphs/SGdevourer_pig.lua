@@ -91,8 +91,6 @@ local states = {
             local normals = inst._combo_count or 1      -- 普攻总次数
             local interval = inst._attack_interval or 8  -- 普攻之间间隔
             local extra = normals - 1                    -- 第1击已由 timeline 完成
-            print(string.format("[PigCombo] LV%d combo=%d extra=%d interval=%d",
-                inst._pig_level or 1, normals, extra, interval))
             -- 动画加速：combo 越多越快
             inst.AnimState:SetDeltaTimeMultiplier(1 + extra * 0.15)
 

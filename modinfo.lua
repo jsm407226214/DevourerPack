@@ -5,7 +5,7 @@ name = isCh and "吞噬者背包" or "Devourer Pack"
 -- 作者名
 author = "江湖书生敏而好学" 
 -- Mod版本，可以自由设定任何值，但如果要在Steam更新自己的Mod，就必须和已经上传的Mod版本有差别。
-version = "1.9.4"
+version = "1.9.9.5"
 -- mod描述
 description = isCh and ([[
 [版本: %s]
@@ -267,6 +267,18 @@ configuration_options = {
             { description = "简体中文", data = "_cn" }
         },
         default = "auto"
+    },
+    {
+        name = "dp_recipe_difficulty",
+        label = isCh and "制作难度" or "Crafting Difficulty",
+        hover = isCh and "设置吞噬者背包的制作材料难度" or "Set the crafting material difficulty for the Devourer Pack",
+        options = {
+            { description = isCh and "简单" or "Easy", data = "easy" },
+            { description = isCh and "普通" or "Normal", data = "normal" },
+            { description = isCh and "困难" or "Hard", data = "hard", hover = isCh and "需要科学机器解锁" or "Requires Science Machine" },
+            { description = isCh and "噩梦" or "Nightmare", data = "nightmare", hover = isCh and "需要炼金引擎解锁" or "Requires Alchemy Engine" },
+        },
+        default = "normal"
     },
     {
         name = "devourer_pack_default_level",

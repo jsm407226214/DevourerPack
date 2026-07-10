@@ -56,7 +56,6 @@ local function RebuildLayout(self, inventory, overflow, do_integrated_backpack, 
     if do_integrated_backpack then
         -- 获取背包总格子数
         local num = overflow:GetNumSlots()
-        -- print("packslot num = ", num, ",equipslot num = ", #self.equipslotinfo, ",inv num = ", #self.inv)
         
         -- 计算可用总格子数：物品栏 + 装备栏
         local total_available_slots = #self.inv + #self.equipslotinfo
@@ -159,15 +158,6 @@ local function RebuildLayout(self, inventory, overflow, do_integrated_backpack, 
                 if slot then
                     -- 尝试不同的属性名来设置背景图像
                     local bg_element = slot.bg or slot.background or slot.bgimage or slot.image
-                    -- 打印slot对象的属性，以便确定正确的属性名
-                    print("DevourerPack: Slot properties for slot " .. k .. ":")
-                    for key, value in pairs(slot) do
-                        if type(value) ~= "function" then
-                            print("  " .. key .. ": " .. tostring(value))
-                        else
-                            print("  " .. key .. ": [function]")
-                        end
-                    end
                     if bg_element and bg_element.SetTexture then
                         -- 重置背景
                         bg_element:SetTexture("images/ui.xml", "inv_slot.tex")
@@ -186,8 +176,7 @@ local function RebuildLayout(self, inventory, overflow, do_integrated_backpack, 
                             bg_element:SetTexture("images/slot_bg_alchemy.xml", "slot_bg_alchemy.tex")
                         end
                     else
-                        -- 如果没有找到背景元素，输出调试信息
-                        print("Warning: Could not find background element for slot ", k)
+                        
                     end
                 end
             end

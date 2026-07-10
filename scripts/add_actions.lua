@@ -83,7 +83,6 @@ local actionList = {
             local devourer = inst.components.devourer
             -- 检查必需函数
             if not (devourer and devourer.OnDevourer) then
-                -- print("No OnDevourer")
                 return false
             end
             -- 执行升级

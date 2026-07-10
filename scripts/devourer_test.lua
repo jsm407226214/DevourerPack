@@ -29,7 +29,7 @@ end
 -- 猪人设置等级（用法: c_piglevel() → 升1级, c_piglevel(15) → 直接到15级）
 GLOBAL.c_piglevel = function(target_lv)
     local dev, err = get_pack()
-    if err then print(err) return end
+    if err then add_utils.debug_print(err) return end
 
     local ps = dev.pig_state
     local pig = ps.pig
@@ -60,12 +60,12 @@ GLOBAL.c_piglevel = function(target_lv)
 
     if pig and pig:IsValid() then
         pig:ProcessKill(false, ps.total_exp)
-        print(string.format("[测试] 猪人 LV%d → LV%d，经验=%d，攻=%.1f 血=%d 连击=%d",
+        add_utils.debug_print(string.format("[测试] 猪人 LV%d → LV%d，经验=%d，攻=%.1f 血=%d 连击=%d",
             cur_lv, dev:GetPigLevel(ps.total_exp), ps.total_exp,
             pig.components.combat.defaultdamage, pig.components.health.maxhealth,
             pig._combo_count or 2))
     else
-        print(string.format("[测试] 猪人未召唤，经验已设为 LV%d（经验=%d），召唤后自动应用",
+        add_utils.debug_print(string.format("[测试] 猪人未召唤，经验已设为 LV%d（经验=%d），召唤后自动应用",
             dev:GetPigLevel(ps.total_exp), ps.total_exp))
     end
 end
@@ -73,12 +73,12 @@ end
 -- 给猪人加经验（用法: c_pigexp(50) → +50经验，正常判定升级/突破条件）
 GLOBAL.c_pigexp = function(add_exp)
     local dev, err = get_pack()
-    if err then print(err) return end
+    if err then add_utils.debug_print(err) return end
 
     local ps = dev.pig_state
     local pig = ps.pig
     local addExp = tonumber(add_exp) or 50
-    if addExp <= 0 then print("[测试] 经验值必须大于0") return end
+    if addExp <= 0 then add_utils.debug_print("[测试] 经验值必须大于0") return end
 
     local oldLevel = dev:GetPigLevel(ps.total_exp)
     ps.total_exp = ps.total_exp + addExp
@@ -91,7 +91,7 @@ GLOBAL.c_pigexp = function(add_exp)
             if not dev:CheckBreakthrough(lv) then
                 ps.total_exp = pig_config._cum_exp[oldLevel + 1] or pig_config._cum_exp[pig_config.growth.max_level]
                 ps.level_exp = ps.total_exp - (pig_config._cum_exp[oldLevel] or 0)
-                print(string.format("[测试] LV%d突破条件未满足，经验封顶于%d", lv, ps.total_exp))
+                add_utils.debug_print(string.format("[测试] LV%d突破条件未满足，经验封顶于%d", lv, ps.total_exp))
                 break
             end
         end
@@ -99,10 +99,10 @@ GLOBAL.c_pigexp = function(add_exp)
 
     if pig and pig:IsValid() then
         pig:ProcessKill(false, ps.total_exp)
-        print(string.format("[测试] +%d经验，总经验=%d，LV%d → LV%d",
+        add_utils.debug_print(string.format("[测试] +%d经验，总经验=%d，LV%d → LV%d",
             addExp, ps.total_exp, oldLevel, dev:GetPigLevel(ps.total_exp)))
     else
-        print(string.format("[测试] 猪人未召唤，经验已加（总经验=%d，LV%d）",
+        add_utils.debug_print(string.format("[测试] 猪人未召唤，经验已加（总经验=%d，LV%d）",
             ps.total_exp, dev:GetPigLevel(ps.total_exp)))
     end
 end
@@ -124,7 +124,7 @@ end
 -- 背包升到2级
 GLOBAL.c_pack2 = function()
     local dev, err = get_pack()
-    if err then print(err) return end
+    if err then add_utils.debug_print(err) return end
 
     local count = devour_items(dev, add_configs.level_up.lv1.item)
     dev.packlv.level = 2
@@ -133,14 +133,14 @@ GLOBAL.c_pack2 = function()
     dev:_SyncUpgradeEffects()
 
     local name = STRINGS.NAMES.DEVOURER_PACK_NAMES[2] or "LV2"
-    print(string.format("[测试] 背包已升到 %s，吞噬了 %d 个物品", name, count))
+    add_utils.debug_print(string.format("[测试] 背包已升到 %s，吞噬了 %d 个物品", name, count))
     TheNet:Announce(string.format("[测试] 背包已升到 %s", name))
 end
 
 -- 背包升到3级
 GLOBAL.c_pack3 = function()
     local dev, err = get_pack()
-    if err then print(err) return end
+    if err then add_utils.debug_print(err) return end
 
     local count1 = devour_items(dev, add_configs.level_up.lv1.item)
     local count2 = devour_items(dev, add_configs.level_up.lv2.item)
@@ -150,18 +150,18 @@ GLOBAL.c_pack3 = function()
     dev:_SyncUpgradeEffects()
 
     local name = STRINGS.NAMES.DEVOURER_PACK_NAMES[3] or "LV3"
-    print(string.format("[测试] 背包已升到 %s，吞噬了 %d 个物品", name, count1 + count2))
+    add_utils.debug_print(string.format("[测试] 背包已升到 %s，吞噬了 %d 个物品", name, count1 + count2))
     TheNet:Announce(string.format("[测试] 背包已升到 %s", name))
 end
 
 -- 吞噬全部可吞噬物品
 GLOBAL.c_packall = function()
     local dev, err = get_pack()
-    if err then print(err) return end
+    if err then add_utils.debug_print(err) return end
 
     local total = 0
     for _ in pairs(dev.upgrade_effects) do total = total + 1 end
-    print(string.format("[c_packall] upgrade_effects 总key数=%d", total))
+    add_utils.debug_print(string.format("[c_packall] upgrade_effects 总key数=%d", total))
     local skipped_enab = 0
     local count = 0
     for prefab, effect in pairs(dev.upgrade_effects) do
@@ -171,23 +171,23 @@ GLOBAL.c_packall = function()
             effect.enab = true
             if effect.max then effect.cur = effect.max end
             count = count + 1
-            print(string.format("[c_packall] 启用: %s max=%s cur=%s",
+            add_utils.debug_print(string.format("[c_packall] 启用: %s max=%s cur=%s",
                 prefab, tostring(effect.max), tostring(effect.cur)))
         end
     end
-    print(string.format("[c_packall] 新启用=%d 已启用跳过=%d packlv前=%d",
+    add_utils.debug_print(string.format("[c_packall] 新启用=%d 已启用跳过=%d packlv前=%d",
         count, skipped_enab, dev.packlv.level))
 
     dev.packlv.level = 3
-    print(string.format("[c_packall] packlv设为3, 调用Upgrade..."))
+    add_utils.debug_print(string.format("[c_packall] packlv设为3, 调用Upgrade..."))
     dev:Upgrade()
-    print(string.format("[c_packall] Upgrade完成, 调用SetPackState..."))
+    add_utils.debug_print(string.format("[c_packall] Upgrade完成, 调用SetPackState..."))
     dev:SetPackState()
-    print(string.format("[c_packall] SetPackState完成, 调用_SyncUpgradeEffects..."))
+    add_utils.debug_print(string.format("[c_packall] SetPackState完成, 调用_SyncUpgradeEffects..."))
     dev:_SyncUpgradeEffects()
-    print(string.format("[c_packall] 全部完成, 共吞噬%d个物品", count))
+    add_utils.debug_print(string.format("[c_packall] 全部完成, 共吞噬%d个物品", count))
 
     TheNet:Announce(string.format("[测试] 已吞噬全部物品（%d个），背包升至满级！", count))
 end
 
-print("[DevourerPack] 测试模块已加载：c_piglevel / c_pack2 / c_pack3 / c_packall")
+add_utils.debug_print("[DevourerPack] 测试模块已加载：c_piglevel / c_pack2 / c_pack3 / c_packall")

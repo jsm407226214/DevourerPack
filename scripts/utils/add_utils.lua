@@ -277,5 +277,13 @@ function utils.MakeUnlimitStackSize(inst)
     end
 end
 
+
+function utils.StopSleepHeal(inst)
+    if inst._sleep_heal_task then
+        inst._sleep_heal_task:Cancel()
+        inst._sleep_heal_task = nil
+    end
+end
+
 -- 返回模块
 return utils

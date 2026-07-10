@@ -176,7 +176,8 @@ function Devourer:Check(item)
 
     -- 检查物品和升级效果表是否存在
     local upgrade_effects = self.inst.replica.devourer.upgrade_effects
-    if item and item.prefab and upgrade_effects and upgrade_effects[item.prefab] and upgrade_effects[item.prefab].show then
+    -- 原本show字段也过滤，现在去掉，因为show只是控制UI显示的，不应该影响功能判断
+    if item and item.prefab and upgrade_effects and upgrade_effects[item.prefab] then
         local tempcheck = upgrade_effects[item.prefab]
         add_utils.debug_print(string.format(" [Replica Check] %s: max=%s, cur=%s, enab=%s, show=%s", item.prefab,
             tostring(tempcheck.max),

@@ -113,9 +113,9 @@ config.growth = {
     -- 进食经验
     eat_exp_raw_meat = 2,
     eat_exp_raw_veggie = 1,
-    eat_exp_prepared_meat = 5,
+    eat_exp_prepared_meat = 4,
     eat_exp_prepared_veggie = 3,
-    eat_exp_favorite = 10,
+    eat_exp_favorite = 6,          -- 最爱料理额外经验
 
     -- 猪人最爱料理
     favorite_foods = {
@@ -128,6 +128,7 @@ config.growth = {
         fishsticks = true,      -- 炸鱼排
         meatysalad = true,      -- 牛肉绿叶菜
         leafloaf = true,        -- 叶肉糕
+        honeynuggets = true,     -- 蜜汁卤肉
     },
 
     -- ========== 基础属性（1级时） ==========
@@ -137,7 +138,7 @@ config.growth = {
     base_walk_speed = 3,
     base_range = 2,
     base_defense = 0,
-    base_freeze_resist = 0,
+    base_freeze_resist = 1,    -- 基础冰冻抗性（1级时1点，之后每级+0.5点）最低一点，避免报错
     base_blood_sucking = 0,
     base_area_attack = 0,
     base_planar_attack = 0,

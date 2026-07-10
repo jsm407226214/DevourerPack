@@ -2,6 +2,7 @@ local containers = require("containers")
 local add_configs = require('configs/add_configs')
 local add_utils = require('utils/add_utils')
 local shared = require("components/devourer/shared")
+local pig_config = require("configs/pig_config")
 local RESISTANCES =
 {
     "_combat",
@@ -211,7 +212,7 @@ local function SetupResistanceSystem(inst)
             return
         end
         
-        local owner = inst.components.inventoryitem:GetGrandOwner() or inst
+        local owner = inst.components.inventoryitem:GetGrandOwner() or inst.components.inventoryitem.owner or inst
         local shieldType = PickShield()
         local fx = SpawnPrefab("shadow_shield"..tostring(shieldType))
         fx.entity:SetParent(owner.entity)
@@ -495,19 +496,6 @@ local function ModCompat(container, widget, lv_x, lv_y, lv_fire, lv_ice, lv_repa
 	--make them read only again after update
 	makereadonly(container, "widget")
 	makereadonly(container, "numslots")
-end
-
--- 幸运值系统（基于官方幸运值系统，增加了事件加成和套装加成）
-local function GetLuckFn(inst, owner)
-    local devourer = inst.components.devourer
-    add_utils.debug_print("GetLuckFn called:", "owner=", owner and owner:GetDisplayName(), "devourer_stats=", devourer and devourer.stats and devourer.stats.luck or "nil")
-    if not devourer then return 0 end
-    local stats = devourer.stats or {}
-    local event_mult = devourer.event.YOTH and TUNING.HORSESHOE_EVENT_LUCK_MULTIPLIER or 1 -- 活动期间幸运值翻3倍
-    local base_luck = (stats.luck or 0) -- * TUNING.HORSESHOE_LUCK -- 基础幸运值，直接取自属性，不再乘以官方系数
-    local suit_mult = EntityHasSetBonus(owner, EQUIPMENTSETNAMES.YOTH_KNIGHT) and 2 or 1 -- 骑士套装幸运值翻倍
-    add_utils.debug_print("Luck calculation:", "base_luck=", base_luck, "event_mult=", event_mult, "suit_mult=", suit_mult)
-    return base_luck * event_mult * suit_mult
 end
 
 local function MakeAncientBroken(item, owner)
@@ -916,7 +904,8 @@ local function MainPeriodicTask(inst)
     end
     
     -- 7. 自动恢复生命（每60秒）
-    if stats.health and stats.health > 0 and owner and owner.components.health and ticks % 6 == 0 then
+    if stats.health and stats.health > 0 and owner and owner.components.health and ticks % 6 == 0 
+        and owner.components.health:GetPercentWithPenalty() < 1 then
         owner.components.health:DoDelta(stats.health)
     end
 end
@@ -1149,7 +1138,7 @@ function Devourer:Check(item)
     add_utils.debug_print(string.format("  传入物品: %s", tostring(item and item.prefab or "nil")))
 
     -- 检查物品和升级效果表是否存在
-    if item and item.prefab and self.upgrade_effects and self.upgrade_effects[item.prefab] and self.upgrade_effects[item.prefab].show then
+    if item and item.prefab and self.upgrade_effects and self.upgrade_effects[item.prefab] then
         local tempcheck = self.upgrade_effects[item.prefab]
         add_utils.debug_print(string.format(" [Devourer Check] %s: max=%s, current=%s, enab=%s, show=%s", item.prefab,
             tostring(tempcheck.max),
@@ -1458,46 +1447,47 @@ function Devourer:OnUnequipItem(owner, inst, data)
     end
 end
 
+local MaxDurability = 999999999999999-- 超过 2^53 才可能丢失精度，所以最多15个9
 -- 保护帽子耐久度：装备时放大耐久上限
 function Devourer:ProtectHatDurability(hat)
     add_utils.debug_print("[ProtectHatDurability] called, hat=" .. tostring(hat) .. ", prefab=" .. tostring(hat and hat.prefab)
         .. ", already_protected=" .. tostring(hat and (hat._dev_original_maxfuel or hat._dev_original_totaluses or hat._dev_original_perish_time or hat._dev_original_armor_max)))
-    -- 如果已经保护过，不覆盖原始值（避免 EquipUpdate 多次调用时把 math.huge 存成"原始值"）
+    -- 如果已经修改过，不覆盖原始值（避免 EquipUpdate 多次调用时把 math.huge 存成"原始值"）
     if hat._dev_original_maxfuel or hat._dev_original_totaluses or hat._dev_original_perish_time or hat._dev_original_armor_max then
         add_utils.debug_print("[ProtectHatDurability] already protected, skip")
         return
     end
 
-    if hat.components.fueled and hat.components.fueled.maxfuel > 0 then
+    if hat.components.fueled and hat.components.fueled.maxfuel and hat.components.fueled.maxfuel > 0 then
         add_utils.debug_print("[ProtectHatDurability] fueled: saving maxfuel=" .. tostring(hat.components.fueled.maxfuel) .. ", percent=" .. tostring(hat.components.fueled:GetPercent()))
         hat._dev_original_maxfuel = hat.components.fueled.maxfuel
         hat._dev_original_fuel_percent = hat.components.fueled:GetPercent()
-        hat.components.fueled.maxfuel = math.huge
+        hat.components.fueled.maxfuel = MaxDurability
         hat.components.fueled:SetPercent(hat._dev_original_fuel_percent)
     end
 
-    if hat.components.finiteuses and hat.components.finiteuses.maxuses > 0 then
+    if hat.components.finiteuses and hat.components.finiteuses.total and hat.components.finiteuses.total > 0 then
         add_utils.debug_print("[ProtectHatDurability] finiteuses: saving total=" .. tostring(hat.components.finiteuses.total) .. ", percent=" .. tostring(hat.components.finiteuses:GetPercent()))
         hat._dev_original_totaluses = hat.components.finiteuses.total
         hat._dev_original_uses_percent = hat.components.finiteuses:GetPercent()
-        hat.components.finiteuses:SetMaxUses(math.huge)
+        hat.components.finiteuses:SetMaxUses(MaxDurability)
         hat.components.finiteuses:SetPercent(hat._dev_original_uses_percent)
     end
 
-    if hat.components.perishable and hat.components.perishable.perishtime > 0 then
+    if hat.components.perishable and hat.components.perishable.perishtime and hat.components.perishable.perishtime > 0 then
         add_utils.debug_print("[ProtectHatDurability] perishable: saving perishtime=" .. tostring(hat.components.perishable.perishtime) .. ", percent=" .. tostring(hat.components.perishable:GetPercent()))
         hat._dev_original_perish_time = hat.components.perishable.perishtime
         hat._dev_original_perish_percent = hat.components.perishable:GetPercent()
-        hat.components.perishable:SetPerishTime(math.huge)
+        hat.components.perishable:SetPerishTime(MaxDurability)
         hat.components.perishable:SetPercent(hat._dev_original_perish_percent)
     end
 
-    if hat.components.armor and hat.components.armor.maxcondition > 0 then
+    if hat.components.armor and hat.components.armor.maxcondition and hat.components.armor.maxcondition > 0 then
         add_utils.debug_print("[ProtectHatDurability] armor: saving maxcondition=" .. tostring(hat.components.armor.maxcondition) .. ", condition=" .. tostring(hat.components.armor.condition))
         hat._dev_original_armor_max = hat.components.armor.maxcondition
         hat._dev_original_armor_percent = hat.components.armor.condition / hat.components.armor.maxcondition
-        hat.components.armor.maxcondition = math.huge
-        hat.components.armor.condition = math.huge
+        hat.components.armor.maxcondition = MaxDurability
+        hat.components.armor.condition = MaxDurability
     end
     add_utils.debug_print("[ProtectHatDurability] done, saved flags: maxfuel=" .. tostring(hat._dev_original_maxfuel) .. ", totaluses=" .. tostring(hat._dev_original_totaluses) .. ", perish=" .. tostring(hat._dev_original_perish_time) .. ", armor=" .. tostring(hat._dev_original_armor_max))
 end
@@ -2941,6 +2931,7 @@ function Devourer:Upgrade()
         -- vegetarian = false,        -- 素食主义者（可以吃素）
         -- carnivore = false,          -- 肉食主义者（可以吃肉）
         -- cookperson = false,           -- 大厨（不挑食）
+        dp_spore_immunity = false,   -- 孢子腐烂免疫
         
         
         hp = 0,                 -- 血量
@@ -2990,6 +2981,13 @@ function Devourer:Upgrade()
         recipe_lunar = false,          -- 辉煌铁匠铺
         recipe_shadow = false,          -- 暗影术基座
         recipe2_moon = false,          -- 天体2级
+
+
+        night_sleep = false,          -- 夜晚睡觉
+        daytime_sleep = false,        -- 白天睡觉
+        sleep_health = 0,             -- 睡觉回血
+        sleep_sanity = 0,             -- 睡觉恢复精神
+        sleep_hunger_cost = 0,         -- 睡觉饥饿消耗
     }
     add_utils.debug_print("[背包升级] 已初始化属性统计表")
 
@@ -3224,7 +3222,7 @@ function Devourer:Upgrade()
         end
         inst.components.shadowlevel:SetDefaultLevel(stats.shadowlevel)
     end
-    if (stats.luck and stats.luck > 0) or (stats.badluck and stats.badluck > 0) then
+    if (stats.luck and stats.luck > 0) or (stats.badluck and stats.badluck > 0) or self:CheckSuit("princessandknight") or self:CheckSuit("knight_suit") then
         add_utils.debug_print(string.format("[幸运/霉运] 幸运值: %s, 霉运值: %s", tostring(stats.luck), tostring(stats.badluck)))
         if not inst.components.luckitem then
             inst:AddComponent("luckitem")
@@ -3249,6 +3247,7 @@ function Devourer:Upgrade()
     AddTagWithLog("manrabbitscarer", "兔人恐惧")
     AddTagWithLog("rabbitdisguise", "兔子伪装")
     AddTagWithLog("hidesmeats", "肉类隐藏")
+    AddTagWithLog("dp_spore_immunity", "孢子腐烂免疫")
     if self:CheckSuit("miasmaimmune", stats) then
         AddTagWithLog("miasmaimmune", "黑暗瘴气免疫")
     end
@@ -3404,7 +3403,7 @@ function Devourer:ShowUnDevouredItems()
     local lv_key = "lv"..current_lv
     local required_items = add_configs.level_up[lv_key] and add_configs.level_up[lv_key].item or {}
 
-    local owner = self.inst.components.inventoryitem:GetGrandOwner()
+    local owner = self.inst.components.inventoryitem:GetGrandOwner() or self.inst.components.inventoryitem.owner
     local owner_role = owner and owner.prefab
     
     -- 2. 优先收集当前等级进化材料
@@ -3633,7 +3632,7 @@ function Devourer:_SyncModsndEventsShow()
 end
 
 function Devourer:SetTreadWater(enable)
-    local owner = self and self.inst.components.inventoryitem:GetGrandOwner()
+    local owner = self and self.inst.components.inventoryitem:GetGrandOwner() or self.inst.components.inventoryitem.owner
     if not owner or not owner.Physics then
         return
     end
@@ -3740,7 +3739,7 @@ end
 
 -- 处理踏水功能
 function Devourer:_HandleTreadWater(value)
-    local owner = self and self.inst.components.inventoryitem:GetGrandOwner()
+    local owner = self and self.inst.components.inventoryitem:GetGrandOwner() or self.inst.components.inventoryitem.owner
     if not owner then return end
     local is_cave = TheWorld:HasTag("cave")
     if is_cave and (not self.stats.voidwalk or self.stats.voidwalk <= 0) then
@@ -3906,7 +3905,7 @@ function Devourer:UpdateWidget()
 	container:Close()
 	ModCompat(container, widget, lv_x, lv_y, lv_fire, lv_ice, lv_repair)
 
-    local owner = self.inst.components.inventoryitem and self.inst.components.inventoryitem:GetGrandOwner()
+    local owner = self.inst.components.inventoryitem and self.inst.components.inventoryitem:GetGrandOwner() or self.inst.components.inventoryitem and self.inst.components.inventoryitem.owner
     add_utils.debug_print("[Devourer:UpdateWidget] 更新背包格子，当前拥有者: ", owner and owner.name or owner and owner.userid or "无")
     if owner and container.Open then
         local ok = pcall(function()
@@ -3919,7 +3918,7 @@ function Devourer:UpdateWidget()
 end
 -- 精神状态切换
 function Devourer:ChangeSanityStatus(new_status)
-    local owner = self and self.inst.components.inventoryitem:GetGrandOwner()
+    local owner = self and self.inst.components.inventoryitem:GetGrandOwner() or self.inst.components.inventoryitem.owner
     if not owner or owner.components.sanity == nil or not self.inst then 
         return STRINGS.DP_DevourerPack.SANITY_CHANGE.NOT
     end
@@ -4301,6 +4300,7 @@ function Devourer:OnLoad(data)
             end
         end
     end
+    self.control_switch["SleepAnywhere"] = 0 -- 睡觉功能不保存状态，每次加载默认关闭 
     -- 恢复当前绑定的功能键
     if data.current_bound_function then
         self.current_bound_function = data.current_bound_function
@@ -4398,26 +4398,29 @@ function Devourer:ChangeLuck(stats)
     if not stats then
         stats = self.stats
     end
-    local luck_mode = self.control_switch.Luck
-    if luck_mode == 2 and stats.luck and stats.luck > 0 then
-        -- 幸运模式：沿用原马蹄铁计算逻辑
-        if not self.inst.components.luckitem then
-            self.inst:AddComponent("luckitem")
-        end
-        self.inst.components.luckitem:SetLuck(GetLuckFn)
-        self.inst.components.luckitem:SetEquippedLuck(GetLuckFn)
-    elseif luck_mode == 3 and stats.badluck and stats.badluck > 0 then
-        -- 霉运模式：直接用 badluck*累计值
-        if not self.inst.components.luckitem then
-            self.inst:AddComponent("luckitem")
-        end
-        self.inst.components.luckitem:SetLuck(stats.badluck)
-        self.inst.components.luckitem:SetEquippedLuck(stats.badluck)
-    elseif self.inst.components.luckitem then
-        -- 关闭或无效值
-        self.inst.components.luckitem:SetLuck(0)
-        self.inst.components.luckitem:SetEquippedLuck(0)
+    local luck_mode = self.control_switch.Luck or 2
+    local luck_value = 0
+    local owner = self.inst.components.inventoryitem and (self.inst.components.inventoryitem:GetGrandOwner() or self.inst.components.inventoryitem.owner)
+
+    if not self.inst.components.luckitem then
+        self.inst:AddComponent("luckitem")
     end
+    -- add_utils.debug_print("[Devourer:ChangeLuck] 计算幸运值，当前模式:", luck_mode, "当前属性: ", stats and ("luck:" .. (stats.luck or 0) .. ", badluck:" .. (stats.badluck or 0)) or "无")
+
+    if luck_mode == 2 and stats.luck and stats.luck > 0 then -- 幸运
+        local event_mult = self.event.YOTH and TUNING.HORSESHOE_EVENT_LUCK_MULTIPLIER or 1
+        local base_luck = stats.luck or 0
+        local suit_mult = owner and EntityHasSetBonus(owner, EQUIPMENTSETNAMES.YOTH_KNIGHT) and 2 or 1
+        luck_value = base_luck * event_mult * suit_mult
+    elseif luck_mode == 3 and stats.badluck and stats.badluck > 0 then -- 霉运
+        luck_value = math.abs(stats.badluck) * -1
+    elseif self.inst.components.luckitem then -- 关闭
+        luck_value = 0
+    end
+    self.inst.components.luckitem:SetLuck(luck_value)
+    self.inst.components.luckitem:SetEquippedLuck(luck_value)
+    -- 推送给玩家更新 luckuser，由 updateownerluck 事件处理统一走 luckitem:OnEquip/OnUnequip 流程
+    self.inst:PushEvent("updateownerluck")
 end
 
 -- 开关控制
